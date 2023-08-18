@@ -7,7 +7,7 @@ public protocol ViewControllerPresentable: UIViewController {
 
 extension ViewControllerPresentable {
 	@MainActor
-	func checkDismissedIfNeeded() {
+	public func checkDismissedIfNeeded() {
 		guard self.isBeingDismissed else { return }
 		defer { onDismiss = nil }
 		onDismiss?()
