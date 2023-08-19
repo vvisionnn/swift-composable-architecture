@@ -360,7 +360,17 @@ final class PresentationStackViewController: NavigationStackViewController<
 	
 	init(store: StoreOf<PresentationStack>) {
 		self.store = store
-		super.init(
+		super.init()
+	}
+	
+	required init?(coder aDecoder: NSCoder) {
+		fatalError("init(coder:) has not been implemented")
+	}
+	
+	override func viewDidLoad() {
+		super.viewDidLoad()
+		
+		self.navigation(
 			store.scope(state: \.stackPath, action: PresentationStack.Action.stackPath),
 			rootViewController: PresentationCounterViewController(
 				store: store.scope(
@@ -377,14 +387,7 @@ final class PresentationStackViewController: NavigationStackViewController<
 				).map(PresentationCounterViewController.init(store:)) ?? UIViewController(nibName: nil, bundle: nil)
 			}
 		}
-	}
-	
-	required init?(coder aDecoder: NSCoder) {
-		fatalError("init(coder:) has not been implemented")
-	}
-	
-	override func viewDidLoad() {
-		super.viewDidLoad()
+		.store(in: &subscriptions)
 		
 		self.presentation(store.scope(
 			state: \.$presentation,
