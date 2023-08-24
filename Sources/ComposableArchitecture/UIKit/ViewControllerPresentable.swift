@@ -18,16 +18,24 @@ extension ViewControllerPresentable {
 	@MainActor
 	public func presentation<State: Equatable, Action>(
 		_ store: Store<PresentationState<State>, PresentationAction<Action>>,
+		_ toDestinationControllerInfo: @escaping (State, Store<State, Action>) -> (any ViewControllerPresentable, Bool)
+	) -> AnyCancellable {
+		self.presentation(store, id: { $0.id }, toDestinationControllerInfo)
+	}
+	
+	@MainActor
+	public func presentation<State: Equatable, Action>(
+		_ store: Store<PresentationState<State>, PresentationAction<Action>>,
 		_ toDestinationController: @escaping (State, Store<State, Action>) -> any ViewControllerPresentable
 	) -> AnyCancellable {
-		self.presentation(store, id: { $0.id }, toDestinationController)
+		self.presentation(store, id: { $0.id }, { (toDestinationController($0, $1), self.canAnimate) })
 	}
 	
 	@MainActor
 	func presentation<State: Equatable, Action, ID: Hashable>(
 		_ store: Store<PresentationState<State>, PresentationAction<Action>>,
 		id toID: @escaping (PresentationState<State>) -> ID?,
-		_ toDestinationController: @escaping (State, Store<State, Action>) -> any ViewControllerPresentable
+		_ toDestinationController: @escaping (State, Store<State, Action>) -> (any ViewControllerPresentable, Bool)
 	) -> AnyCancellable {
 		ViewStore(store, observe: { $0 }, removeDuplicates: { toID($0) == toID($1) })
 			.publisher
@@ -42,6 +50,11 @@ extension ViewControllerPresentable {
 					switch (prevState?.wrappedValue, presentationState.wrappedValue) {
 					case (.none, .none):
 						return
+						
+					case (.some, .none):
+						guard self.presentedViewController != nil else { return }
+						await self.dismissAsync(animated: self.canAnimate)
+						return
 					
 					case let (.none, .some(_state)):
 						shouldDismiss = false
@@ -50,26 +63,24 @@ extension ViewControllerPresentable {
 					case let (.some, .some(_state)):
 						shouldDismiss = true
 						wrappedState = _state
-						
-					case (.some, .none):
-						guard self.presentedViewController != nil else { return }
-						await self.dismissAsync(animated: self.canAnimate)
-						return
 					}
+
 					guard let wrappedState else { return }
 					let originalId = toID(presentationState)
-					let freshViewController = store.scope(
+					let freshViewControllerInfo = store.scope(
 						state: returningLastNonNilValue { originalId == toID(store.state.value) ? $0.wrappedValue : nil },
 						action: { .presented($0) }
-					).map { toDestinationController(wrappedState, $0) } ?? PresentationViewController(nibName: nil, bundle: nil)
+					).map({ toDestinationController(wrappedState, $0) })
+					let freshViewController = freshViewControllerInfo?.0 ?? PresentationViewController(nibName: nil, bundle: nil)
+					let isAnimated = freshViewControllerInfo?.1 ?? self.canAnimate
 					freshViewController.onDismiss = { @MainActor [weak store] in
 						guard let _store = store, toID(_store.state.value) == originalId else { return }
 						_store.send(.dismiss)
 					}
 					if shouldDismiss {
-						await self.dismissAsync(animated: self.canAnimate)
+						await self.dismissAsync(animated: isAnimated)
 					}
-					await self.presentAsync(freshViewController, animated: self.canAnimate)
+					await self.presentAsync(freshViewController, animated: isAnimated)
 				}
 			}
 	}
