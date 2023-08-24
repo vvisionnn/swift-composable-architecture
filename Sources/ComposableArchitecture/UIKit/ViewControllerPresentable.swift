@@ -61,11 +61,9 @@ extension ViewControllerPresentable {
 					case (.none, .none):
 						return
 						
-					case (.some, .none):
+					case let (.some(prevState), .none):
 						guard self.presentedViewController != nil else { return }
-						let isAnimateDismiss = wrappedState != nil
-							? (shouldAnimateDismiss?(wrappedState!) ?? self.canAnimate)
-							: self.canAnimate
+						let isAnimateDismiss = shouldAnimateDismiss?(prevState) ?? self.canAnimate
 						await self.dismissAsync(animated: isAnimateDismiss)
 						return
 					
