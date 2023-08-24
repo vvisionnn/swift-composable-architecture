@@ -8,25 +8,40 @@ open class NavigationStackViewController<
 >: UINavigationController, UINavigationControllerDelegate, ViewControllerPresentable {
 	typealias Destinations = OrderedDictionary<StackElementID, UIViewController>
 	
-	private let store: Store<StackState<State>, StackAction<State, Action>>
-	private let rootDestination: UIViewController
+	private var store: Store<StackState<State>, StackAction<State, Action>>!
+	private var rootDestination: UIViewController!
 	private var destinations: Destinations = .init()
-	private var destinationSubscription: AnyCancellable?
 
 	public var onDismiss: (() -> Void)? = nil
 	
 	@MainActor
-	public init(
+	public init() { super.init(nibName: nil, bundle: nil) }
+	
+	required public init?(coder aDecoder: NSCoder) {
+		fatalError("init(coder:) has not been implemented")
+	}
+	
+	open override func viewDidDisappear(_ animated: Bool) {
+		super.viewDidDisappear(animated)
+		checkDismissedIfNeeded()
+	}
+	
+	public typealias DestinationCreator = @MainActor (
+		_ initialState: State,
+		_ destinationStore: Store<State, Action>
+	) -> UIViewController
+	
+	@MainActor
+	public func navigation(
 		_ store: Store<StackState<State>, StackAction<State, Action>>,
 		rootViewController: UIViewController,
-		destination: @MainActor @escaping (_ initialState: State, _ destinationStore: Store<State, Action>) -> UIViewController
-	) {
+		destination: @escaping DestinationCreator
+	) -> AnyCancellable {
 		self.store = store
 		self.rootDestination = rootViewController
-		self.destinationSubscription = nil
-		super.init(rootViewController: rootViewController)
+		self.viewControllers = [rootViewController]
 		self.delegate = self
-		self.destinationSubscription = store.publisher
+		return store.publisher
 			.removeDuplicates(by: { areOrderedSetsDuplicates($0.ids, $1.ids) })
 			.receive(on: RunLoop.main)
 			.sink { [weak self] stackState in
@@ -48,15 +63,6 @@ open class NavigationStackViewController<
 					animated: self.viewIfLoaded?.window != nil
 				)
 			}
-	}
-	
-	required public init?(coder aDecoder: NSCoder) {
-		fatalError("init(coder:) has not been implemented")
-	}
-	
-	open override func viewDidDisappear(_ animated: Bool) {
-		super.viewDidDisappear(animated)
-		if isBeingDismissed { self.onDismiss?() }
 	}
 	
 	public func navigationController(
