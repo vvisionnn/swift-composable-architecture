@@ -86,6 +86,7 @@ extension ViewControllerPresentable {
 					let isAnimateDismiss = shouldAnimateDismiss?(wrappedState) ?? self.canAnimate
 					freshViewController.onDismiss = { @MainActor [weak store] in
 						guard let _store = store, toID(_store.state.value) == originalId else { return }
+						guard _store.state.value.wrappedValue != nil else { return }
 						_store.send(.dismiss)
 					}
 					if shouldDismiss {
