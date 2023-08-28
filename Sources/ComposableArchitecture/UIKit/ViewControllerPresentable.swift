@@ -63,7 +63,7 @@ extension ViewControllerPresentable {
 						
 					case let (.some(prevState), .none):
 						guard self.presentedViewController != nil else { return }
-						let isAnimateDismiss = shouldAnimateDismiss?(prevState) ?? self.canAnimate
+						let isAnimateDismiss = shouldAnimateDismiss?(prevState) ?? true
 						await self.dismissAsync(animated: isAnimateDismiss)
 						return
 					
@@ -82,8 +82,8 @@ extension ViewControllerPresentable {
 						state: returningLastNonNilValue { originalId == toID(store.state.value) ? $0.wrappedValue : nil },
 						action: { .presented($0) }
 					).map({ toDestinationController(wrappedState, $0) }) ?? PresentationViewController(nibName: nil, bundle: nil)
-					let isAnimatePresentation = shouldAnimatePresentation?(wrappedState) ?? self.canAnimate
-					let isAnimateDismiss = shouldAnimateDismiss?(wrappedState) ?? self.canAnimate
+					let isAnimatePresentation = shouldAnimatePresentation?(wrappedState) ?? true
+					let isAnimateDismiss = shouldAnimateDismiss?(wrappedState) ?? true
 					freshViewController.onDismiss = { @MainActor [weak store] in
 						guard let _store = store, toID(_store.state.value) == originalId else { return }
 						guard _store.state.value.wrappedValue != nil else { return }
@@ -99,8 +99,6 @@ extension ViewControllerPresentable {
 }
 
 extension UIViewController {
-	fileprivate var canAnimate: Bool { self.viewIfLoaded?.window != nil }
-	
 	@MainActor
 	fileprivate func presentAsync(_ viewControllerToPresent: UIViewController, animated: Bool) async {
 		await withCheckedContinuation { continuation in
