@@ -65,7 +65,7 @@ open class NavigationStackViewController<
 			}
 	}
 	
-	public func navigationController(
+	open func navigationController(
 		_ navigationController: UINavigationController,
 		willShow viewController: UIViewController,
 		animated: Bool
@@ -82,6 +82,24 @@ open class NavigationStackViewController<
 			self?.checkPath()
 		})
 	}
+	
+	open func navigationController(
+		_ navigationController: UINavigationController,
+		didShow viewController: UIViewController,
+		animated: Bool
+	) {}
+	
+	open func navigationController(
+		_ navigationController: UINavigationController,
+		interactionControllerFor animationController: UIViewControllerAnimatedTransitioning
+	) -> UIViewControllerInteractiveTransitioning? { nil }
+	
+	open func navigationController(
+		_ navigationController: UINavigationController,
+		animationControllerFor operation: UINavigationController.Operation,
+		from fromVC: UIViewController,
+		to toVC: UIViewController
+	) -> UIViewControllerAnimatedTransitioning? { nil }
 	
 	fileprivate func checkPath() {
 		// only handle pop, push always triggerred programatically
