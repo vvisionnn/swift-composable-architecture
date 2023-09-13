@@ -83,24 +83,6 @@ open class NavigationStackViewController<
 		})
 	}
 	
-	open func navigationController(
-		_ navigationController: UINavigationController,
-		didShow viewController: UIViewController,
-		animated: Bool
-	) {}
-	
-	open func navigationController(
-		_ navigationController: UINavigationController,
-		interactionControllerFor animationController: UIViewControllerAnimatedTransitioning
-	) -> UIViewControllerInteractiveTransitioning? { nil }
-	
-	open func navigationController(
-		_ navigationController: UINavigationController,
-		animationControllerFor operation: UINavigationController.Operation,
-		from fromVC: UIViewController,
-		to toVC: UIViewController
-	) -> UIViewControllerAnimatedTransitioning? { nil }
-	
 	fileprivate func checkPath() {
 		// only handle pop, push always triggerred programatically
 		// which means the number always same
