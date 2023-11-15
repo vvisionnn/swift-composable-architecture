@@ -15,26 +15,29 @@ extension DependencyValues {
 /// Execute this in the effect returned from a reducer in order to dismiss the feature:
 ///
 /// ```swift
-/// struct ChildFeature: Reducer {
+/// @Reducer
+/// struct ChildFeature {
 ///   struct State { /* ... */ }
 ///   enum Action {
 ///     case exitButtonTapped
 ///     // ...
 ///   }
 ///   @Dependency(\.dismiss) var dismiss
-///   func reduce(into state: inout State, action: Action) -> Effect<Action> {
-///     switch action {
-///     case .exitButtonTapped:
-///       return .run { _ in await self.dismiss() }
-///     // ...
+///   var body: some Reducer<State, Action> {
+///     Reduce { state, action in
+///       switch action {
+///       case .exitButtonTapped:
+///         return .run { _ in await self.dismiss() }
+///       // ...
+///       }
 ///     }
 ///   }
 /// }
 /// ```
 ///
 /// This operation works by finding the nearest parent feature that was presented using either the
-/// ``Reducer/ifLet(_:action:destination:fileID:line:)`` or the
-/// ``Reducer/forEach(_:action:destination:fileID:line:)`` operator, and then dismisses _that_
+/// ``Reducer/ifLet(_:action:destination:fileID:line:)-4f2at`` or the
+/// ``Reducer/forEach(_:action:destination:fileID:line:)-yz3v`` operator, and then dismisses _that_
 /// feature. It performs the dismissal by either sending the ``PresentationAction/dismiss`` in the
 /// case of `ifLet` or sending ``StackAction/popFrom(id:)`` in the case of `forEach`.
 ///
@@ -89,6 +92,15 @@ public struct DismissEffect: Sendable {
     fileID: StaticString = #fileID,
     line: UInt = #line
   ) async {
+    await callAsFunction(transaction: Transaction(animation: animation), fileID: fileID, line: line)
+  }
+
+  @MainActor
+  public func callAsFunction(
+    transaction: Transaction,
+    fileID: StaticString = #fileID,
+    line: UInt = #line
+  ) async {
     guard let dismiss = self.dismiss
     else {
       runtimeWarn(
@@ -104,7 +116,7 @@ public struct DismissEffect: Sendable {
       )
       return
     }
-    withAnimation(animation) {
+    withTransaction(transaction) {
       dismiss()
     }
   }

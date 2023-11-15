@@ -2,9 +2,10 @@ import AVFoundation
 import ComposableArchitecture
 import SwiftUI
 
-struct VoiceMemos: Reducer {
+@Reducer
+struct VoiceMemos {
   struct State: Equatable {
-    @PresentationState var alert: AlertState<AlertAction>?
+    @PresentationState var alert: AlertState<Action.Alert>?
     var audioRecorderPermission = RecorderPermission.undetermined
     @PresentationState var recordingMemo: RecordingMemo.State?
     var voiceMemos: IdentifiedArrayOf<VoiceMemo.State> = []
@@ -16,17 +17,17 @@ struct VoiceMemos: Reducer {
     }
   }
 
-  enum Action: Equatable {
-    case alert(PresentationAction<AlertAction>)
+  enum Action {
+    case alert(PresentationAction<Alert>)
     case onDelete(IndexSet)
     case openSettingsButtonTapped
     case recordButtonTapped
     case recordPermissionResponse(Bool)
     case recordingMemo(PresentationAction<RecordingMemo.Action>)
-    case voiceMemos(id: VoiceMemo.State.ID, action: VoiceMemo.Action)
-  }
+    case voiceMemos(IdentifiedActionOf<VoiceMemo>)
 
-  enum AlertAction: Equatable {}
+    enum Alert: Equatable {}
+  }
 
   @Dependency(\.audioRecorder.requestRecordPermission) var requestRecordPermission
   @Dependency(\.date) var date
@@ -95,7 +96,7 @@ struct VoiceMemos: Reducer {
           return .none
         }
 
-      case let .voiceMemos(id: id, action: .delegate(delegateAction)):
+      case let .voiceMemos(.element(id: id, action: .delegate(delegateAction))):
         switch delegateAction {
         case .playbackFailed:
           state.alert = AlertState { TextState("Voice memo playback failed.") }
@@ -111,11 +112,11 @@ struct VoiceMemos: Reducer {
         return .none
       }
     }
-    .ifLet(\.$alert, action: /Action.alert)
-    .ifLet(\.$recordingMemo, action: /Action.recordingMemo) {
+    .ifLet(\.$alert, action: \.alert)
+    .ifLet(\.$recordingMemo, action: \.recordingMemo) {
       RecordingMemo()
     }
-    .forEach(\.voiceMemos, action: /Action.voiceMemos) {
+    .forEach(\.voiceMemos, action: \.voiceMemos) {
       VoiceMemo()
     }
   }
@@ -138,16 +139,14 @@ struct VoiceMemosView: View {
       NavigationStack {
         VStack {
           List {
-            ForEachStore(
-              self.store.scope(state: \.voiceMemos, action: VoiceMemos.Action.voiceMemos)
-            ) {
+            ForEachStore(self.store.scope(state: \.voiceMemos, action: { .voiceMemos($0) })) {
               VoiceMemoView(store: $0)
             }
             .onDelete { viewStore.send(.onDelete($0)) }
           }
 
           IfLetStore(
-            self.store.scope(state: \.$recordingMemo, action: VoiceMemos.Action.recordingMemo)
+            self.store.scope(state: \.$recordingMemo, action: { .recordingMemo($0) })
           ) { store in
             RecordingMemoView(store: store)
           } else: {
@@ -161,7 +160,7 @@ struct VoiceMemosView: View {
           .frame(maxWidth: .infinity)
           .background(Color.init(white: 0.95))
         }
-        .alert(store: self.store.scope(state: \.$alert, action: VoiceMemos.Action.alert))
+        .alert(store: self.store.scope(state: \.$alert, action: { .alert($0) }))
         .navigationTitle("Voice memos")
       }
     }

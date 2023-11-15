@@ -47,7 +47,7 @@ But, so far we have just defined one term, "navigation", by using another undefi
 or vice-versa.
 
 So, when a piece of state switches from not existing to existing, that represents a navigation and 
-change mode in the application, and when the state switches back to not existing, it represents 
+change of mode in the application, and when the state switches back to not existing, it represents 
 undoing the navigation and returning to the previous mode.
 
 That is very abstract way of describing state-driven navigation, and the next two sections make
@@ -67,7 +67,8 @@ those items performs a drill-down navigation to a detail screen for the item. Th
 modeled with the ``PresentationState`` property wrapper pointing to some optional state:
 
 ```swift
-struct InventoryFeature: Reducer {
+@Reducer
+struct InventoryFeature {
   struct State {
     @PresentationState var detailItem: DetailItemFeature.State?
     // ...
@@ -80,7 +81,8 @@ Then, inside that detail screen there may be a button to edit the item in a shee
 be modeled with a ``PresentationState`` property wrapper pointing to a piece of optional state:
 
 ```swift
-struct DetailItemFeature: Reducer {
+@Reducer
+struct DetailItemFeature {
   struct State {
     @PresentationState var editItem: EditItemFeature.State?
     // ...
@@ -93,7 +95,8 @@ And further, inside the "edit item" feature there can be a piece of optional sta
 whether or not an alert is displayed:
 
 ```swift
-struct EditItemFeature: Reducer {
+@Reducer
+struct EditItemFeature {
   struct State {
     @PresentationState var alert: AlertState<AlertAction>?
     // ...
@@ -102,7 +105,7 @@ struct EditItemFeature: Reducer {
 }
 ```
 
-And this can continue on and on for as many layers of navigation exist in the application.
+And this can continue on and on for as many layers of navigation that exist in the application.
 
 With that done, the act of deep-linking into the application is a mere exercise in constructing
 a piece of deeply nested state. So, if we wanted to launch the inventory view into a state where

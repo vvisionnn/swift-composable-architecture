@@ -23,9 +23,9 @@ jobs:
           - debug
           - release
     steps:
-      - uses: actions/checkout@v3
-      - name: Select Xcode 14.3
-        run: sudo xcode-select -s /Applications/Xcode_14.3.app
+      - uses: actions/checkout@v4
+      - name: Select Xcode 15
+        run: sudo xcode-select -s /Applications/Xcode_15.0.1.app
       - name: Run ${{ matrix.config }} tests
         run: make CONFIG=${{ matrix.config }} test-library
 
@@ -33,9 +33,9 @@ jobs:
     name: Library (evolution)
     runs-on: macos-13
     steps:
-      - uses: actions/checkout@v3
-      - name: Select Xcode 14.3
-        run: sudo xcode-select -s /Applications/Xcode_14.3.app
+      - uses: actions/checkout@v4
+      - name: Select Xcode 15
+        run: sudo xcode-select -s /Applications/Xcode_15.0.1.app
       - name: Build for library evolution
         run: make build-for-library-evolution
 
@@ -43,9 +43,9 @@ jobs:
     name: Benchmarks
     runs-on: macos-13
     steps:
-      - uses: actions/checkout@v3
-      - name: Select Xcode 14.3
-        run: sudo xcode-select -s /Applications/Xcode_14.3.app
+      - uses: actions/checkout@v4
+      - name: Select Xcode 15
+        run: sudo xcode-select -s /Applications/Xcode_15.0.1.app
       - name: Run benchmark
         run: make benchmark
 
@@ -53,8 +53,8 @@ jobs:
     name: Examples
     runs-on: macos-13
     steps:
-      - uses: actions/checkout@v3
-      - name: Select Xcode 14.3
-        run: sudo xcode-select -s /Applications/Xcode_14.3.app
+      - uses: actions/checkout@v4
+      - name: Select Xcode 15
+        run: sudo xcode-select -s /Applications/Xcode_15.0.1.app
       - name: Run tests
         run: make test-examples

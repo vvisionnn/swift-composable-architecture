@@ -5,12 +5,13 @@ private let readMe = """
   This screen demonstrates how to use `NavigationStack` with Composable Architecture applications.
   """
 
-struct NavigationDemo: Reducer {
+@Reducer
+struct NavigationDemo {
   struct State: Equatable {
     var path = StackState<Path.State>()
   }
 
-  enum Action: Equatable {
+  enum Action {
     case goBackToScreen(id: StackElementID)
     case goToABCButtonTapped
     case path(StackAction<Path.State, Path.Action>)
@@ -53,32 +54,33 @@ struct NavigationDemo: Reducer {
         return .none
       }
     }
-    .forEach(\.path, action: /Action.path) {
+    .forEach(\.path, action: \.path) {
       Path()
     }
   }
 
-  struct Path: Reducer {
+  @Reducer
+  struct Path {
     enum State: Codable, Equatable, Hashable {
       case screenA(ScreenA.State = .init())
       case screenB(ScreenB.State = .init())
       case screenC(ScreenC.State = .init())
     }
 
-    enum Action: Equatable {
+    enum Action {
       case screenA(ScreenA.Action)
       case screenB(ScreenB.Action)
       case screenC(ScreenC.Action)
     }
 
     var body: some Reducer<State, Action> {
-      Scope(state: /State.screenA, action: /Action.screenA) {
+      Scope(state: \.screenA, action: \.screenA) {
         ScreenA()
       }
-      Scope(state: /State.screenB, action: /Action.screenB) {
+      Scope(state: \.screenB, action: \.screenB) {
         ScreenB()
       }
-      Scope(state: /State.screenC, action: /Action.screenC) {
+      Scope(state: \.screenC, action: \.screenC) {
         ScreenC()
       }
     }
@@ -86,12 +88,12 @@ struct NavigationDemo: Reducer {
 }
 
 struct NavigationDemoView: View {
-  let store: StoreOf<NavigationDemo>
+  @State var store = Store(initialState: NavigationDemo.State()) {
+    NavigationDemo()
+  }
 
   var body: some View {
-    NavigationStackStore(
-      self.store.scope(state: \.path, action: NavigationDemo.Action.path)
-    ) {
+    NavigationStackStore(self.store.scope(state: \.path, action: { .path($0) })) {
       Form {
         Section { Text(template: readMe) }
 
@@ -210,54 +212,57 @@ struct FloatingMenuView: View {
 
 // MARK: - Screen A
 
-struct ScreenA: Reducer {
+@Reducer
+struct ScreenA {
   struct State: Codable, Equatable, Hashable {
     var count = 0
     var fact: String?
     var isLoading = false
   }
 
-  enum Action: Equatable {
+  enum Action {
     case decrementButtonTapped
     case dismissButtonTapped
     case incrementButtonTapped
     case factButtonTapped
-    case factResponse(TaskResult<String>)
+    case factResponse(Result<String, Error>)
   }
 
   @Dependency(\.dismiss) var dismiss
   @Dependency(\.factClient) var factClient
 
-  func reduce(into state: inout State, action: Action) -> Effect<Action> {
-    switch action {
-    case .decrementButtonTapped:
-      state.count -= 1
-      return .none
+  var body: some Reducer<State, Action> {
+    Reduce { state, action in
+      switch action {
+      case .decrementButtonTapped:
+        state.count -= 1
+        return .none
 
-    case .dismissButtonTapped:
-      return .run { _ in
-        await self.dismiss()
+      case .dismissButtonTapped:
+        return .run { _ in
+          await self.dismiss()
+        }
+
+      case .incrementButtonTapped:
+        state.count += 1
+        return .none
+
+      case .factButtonTapped:
+        state.isLoading = true
+        return .run { [count = state.count] send in
+          await send(.factResponse(Result { try await self.factClient.fetch(count) }))
+        }
+
+      case let .factResponse(.success(fact)):
+        state.isLoading = false
+        state.fact = fact
+        return .none
+
+      case .factResponse(.failure):
+        state.isLoading = false
+        state.fact = nil
+        return .none
       }
-
-    case .incrementButtonTapped:
-      state.count += 1
-      return .none
-
-    case .factButtonTapped:
-      state.isLoading = true
-      return .run { [count = state.count] send in
-        await send(.factResponse(.init { try await self.factClient.fetch(count) }))
-      }
-
-    case let .factResponse(.success(fact)):
-      state.isLoading = false
-      state.fact = fact
-      return .none
-
-    case .factResponse(.failure):
-      state.isLoading = false
-      state.fact = nil
-      return .none
     }
   }
 }
@@ -339,23 +344,26 @@ struct ScreenAView: View {
 
 // MARK: - Screen B
 
-struct ScreenB: Reducer {
+@Reducer
+struct ScreenB {
   struct State: Codable, Equatable, Hashable {}
 
-  enum Action: Equatable {
+  enum Action {
     case screenAButtonTapped
     case screenBButtonTapped
     case screenCButtonTapped
   }
 
-  func reduce(into state: inout State, action: Action) -> Effect<Action> {
-    switch action {
-    case .screenAButtonTapped:
-      return .none
-    case .screenBButtonTapped:
-      return .none
-    case .screenCButtonTapped:
-      return .none
+  var body: some Reducer<State, Action> {
+    Reduce { state, action in
+      switch action {
+      case .screenAButtonTapped:
+        return .none
+      case .screenBButtonTapped:
+        return .none
+      case .screenCButtonTapped:
+        return .none
+      }
     }
   }
 }
@@ -364,41 +372,40 @@ struct ScreenBView: View {
   let store: StoreOf<ScreenB>
 
   var body: some View {
-    WithViewStore(self.store, observe: { $0 }) { viewStore in
-      Form {
-        Section {
-          Text(
-            """
-            This screen demonstrates how to navigate to other screens without needing to compile \
-            any symbols from those screens. You can send an action into the system, and allow the \
-            root feature to intercept that action and push the next feature onto the stack.
-            """
-          )
-        }
-        Button("Decoupled navigation to screen A") {
-          viewStore.send(.screenAButtonTapped)
-        }
-        Button("Decoupled navigation to screen B") {
-          viewStore.send(.screenBButtonTapped)
-        }
-        Button("Decoupled navigation to screen C") {
-          viewStore.send(.screenCButtonTapped)
-        }
+    Form {
+      Section {
+        Text(
+          """
+          This screen demonstrates how to navigate to other screens without needing to compile \
+          any symbols from those screens. You can send an action into the system, and allow the \
+          root feature to intercept that action and push the next feature onto the stack.
+          """
+        )
       }
-      .navigationTitle("Screen B")
+      Button("Decoupled navigation to screen A") {
+        self.store.send(.screenAButtonTapped)
+      }
+      Button("Decoupled navigation to screen B") {
+        self.store.send(.screenBButtonTapped)
+      }
+      Button("Decoupled navigation to screen C") {
+        self.store.send(.screenCButtonTapped)
+      }
     }
+    .navigationTitle("Screen B")
   }
 }
 
 // MARK: - Screen C
 
-struct ScreenC: Reducer {
+@Reducer
+struct ScreenC {
   struct State: Codable, Equatable, Hashable {
     var count = 0
     var isTimerRunning = false
   }
 
-  enum Action: Equatable {
+  enum Action {
     case startButtonTapped
     case stopButtonTapped
     case timerTick
@@ -407,25 +414,27 @@ struct ScreenC: Reducer {
   @Dependency(\.mainQueue) var mainQueue
   enum CancelID { case timer }
 
-  func reduce(into state: inout State, action: Action) -> Effect<Action> {
-    switch action {
-    case .startButtonTapped:
-      state.isTimerRunning = true
-      return .run { send in
-        for await _ in self.mainQueue.timer(interval: 1) {
-          await send(.timerTick)
+  var body: some Reducer<State, Action> {
+    Reduce { state, action in
+      switch action {
+      case .startButtonTapped:
+        state.isTimerRunning = true
+        return .run { send in
+          for await _ in self.mainQueue.timer(interval: 1) {
+            await send(.timerTick)
+          }
         }
+        .cancellable(id: CancelID.timer)
+        .concatenate(with: .send(.stopButtonTapped))
+
+      case .stopButtonTapped:
+        state.isTimerRunning = false
+        return .cancel(id: CancelID.timer)
+
+      case .timerTick:
+        state.count += 1
+        return .none
       }
-      .cancellable(id: CancelID.timer)
-      .concatenate(with: .send(.stopButtonTapped))
-
-    case .stopButtonTapped:
-      state.isTimerRunning = false
-      return .cancel(id: CancelID.timer)
-
-    case .timerTick:
-      state.count += 1
-      return .none
     }
   }
 }
@@ -454,7 +463,7 @@ struct ScreenCView: View {
         Section {
           NavigationLink(
             "Go to screen A",
-            state: NavigationDemo.Path.State.screenA(.init(count: viewStore.count))
+            state: NavigationDemo.Path.State.screenA(ScreenA.State(count: viewStore.count))
           )
           NavigationLink(
             "Go to screen B",

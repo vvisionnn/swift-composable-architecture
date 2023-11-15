@@ -71,6 +71,9 @@ public final class ViewStore<ViewState, ViewAction>: ObservableObject {
   private let _send: (ViewAction) -> Task<Void, Never>?
   fileprivate let _state: CurrentValueRelay<ViewState>
   private var viewCancellable: AnyCancellable?
+  #if DEBUG
+    private var storeTypeName: String
+  #endif
 
   /// Initializes a view store from a store which observes changes to state.
   ///
@@ -92,9 +95,13 @@ public final class ViewStore<ViewState, ViewAction>: ObservableObject {
     removeDuplicates isDuplicate: @escaping (_ lhs: ViewState, _ rhs: ViewState) -> Bool
   ) {
     self._send = { store.send($0, originatingFrom: nil) }
-    self._state = CurrentValueRelay(toViewState(store.state.value))
+    self._state = CurrentValueRelay(toViewState(store.stateSubject.value))
     self._isInvalidated = store._isInvalidated
-    self.viewCancellable = store.state
+    #if DEBUG
+      self.storeTypeName = ComposableArchitecture.storeTypeName(of: store)
+      Logger.shared.log("View\(self.storeTypeName).init")
+    #endif
+    self.viewCancellable = store.stateSubject
       .map(toViewState)
       .removeDuplicates(by: isDuplicate)
       .sink { [weak objectWillChange = self.objectWillChange, weak _state = self._state] in
@@ -103,6 +110,12 @@ public final class ViewStore<ViewState, ViewAction>: ObservableObject {
         _state.value = $0
       }
   }
+
+  #if DEBUG
+    deinit {
+      Logger.shared.log("View\(self.storeTypeName).deinit")
+    }
+  #endif
 
   /// Initializes a view store from a store which observes changes to state.
   ///
@@ -126,9 +139,13 @@ public final class ViewStore<ViewState, ViewAction>: ObservableObject {
     removeDuplicates isDuplicate: @escaping (_ lhs: ViewState, _ rhs: ViewState) -> Bool
   ) {
     self._send = { store.send(fromViewAction($0), originatingFrom: nil) }
-    self._state = CurrentValueRelay(toViewState(store.state.value))
+    self._state = CurrentValueRelay(toViewState(store.stateSubject.value))
     self._isInvalidated = store._isInvalidated
-    self.viewCancellable = store.state
+    #if DEBUG
+      self.storeTypeName = ComposableArchitecture.storeTypeName(of: store)
+      Logger.shared.log("View\(self.storeTypeName).init")
+    #endif
+    self.viewCancellable = store.stateSubject
       .map(toViewState)
       .removeDuplicates(by: isDuplicate)
       .sink { [weak objectWillChange = self.objectWillChange, weak _state = self._state] in
@@ -139,6 +156,15 @@ public final class ViewStore<ViewState, ViewAction>: ObservableObject {
   }
 
   init(_ viewStore: ViewStore<ViewState, ViewAction>) {
+    #if DEBUG
+      self.storeTypeName = """
+        Store<\
+        \(typeName(ViewState.self, genericsAbbreviated: false)), \
+        \(typeName(ViewAction.self, genericsAbbreviated: false))\
+        >
+        """
+      Logger.shared.log("View\(self.storeTypeName).init")
+    #endif
     self._send = viewStore._send
     self._state = viewStore._state
     self._isInvalidated = viewStore._isInvalidated
@@ -245,29 +271,32 @@ public final class ViewStore<ViewState, ViewAction>: ObservableObject {
   /// gesture is performed on a list. The domain and logic for this feature can be modeled like so:
   ///
   /// ```swift
-  /// struct Feature: Reducer {
+  /// @Reducer
+  /// struct Feature {
   ///   struct State: Equatable {
   ///     var isLoading = false
   ///     var response: String?
   ///   }
   ///   enum Action {
   ///     case pulledToRefresh
-  ///     case receivedResponse(TaskResult<String>)
+  ///     case receivedResponse(Result<String, Error>)
   ///   }
   ///   @Dependency(\.fetch) var fetch
   ///
-  ///   func reduce(into state: inout State, action: Action) -> Effect<Action> {
-  ///     switch action {
-  ///     case .pulledToRefresh:
-  ///       state.isLoading = true
-  ///       return .run { send in
-  ///         await send(.receivedResponse(TaskResult { try await self.fetch() }))
-  ///       }
+  ///   var body: some Reducer<State, Action> {
+  ///     Reduce { state, action in
+  ///       switch action {
+  ///       case .pulledToRefresh:
+  ///         state.isLoading = true
+  ///         return .run { send in
+  ///           await send(.receivedResponse(Result { try await self.fetch() }))
+  ///         }
   ///
-  ///     case let .receivedResponse(result):
-  ///       state.isLoading = false
-  ///       state.response = try? result.value
-  ///       return .none
+  ///       case let .receivedResponse(result):
+  ///         state.isLoading = false
+  ///         state.response = try? result.value
+  ///         return .none
+  ///       }
   ///     }
   ///   }
   /// }
@@ -315,7 +344,7 @@ public final class ViewStore<ViewState, ViewAction>: ObservableObject {
     await withTaskCancellationHandler {
       await self.yield(while: predicate)
     } onCancel: {
-      task.rawValue?.cancel()
+      task.cancel()
     }
   }
 
@@ -338,7 +367,7 @@ public final class ViewStore<ViewState, ViewAction>: ObservableObject {
     await withTaskCancellationHandler {
       await self.yield(while: predicate)
     } onCancel: {
-      task.rawValue?.cancel()
+      task.cancel()
     }
   }
 

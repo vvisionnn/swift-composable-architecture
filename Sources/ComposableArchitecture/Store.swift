@@ -60,17 +60,17 @@ import SwiftUI
 ///   var body: some View {
 ///     TabView {
 ///       ActivityView(
-///         store: self.store.scope(state: \.activity, action: AppFeature.Action.activity)
+///         store: self.store.scope(state: \.activity, action: { .activity($0) })
 ///       )
 ///       .tabItem { Text("Activity") }
 ///
 ///       SearchView(
-///         store: self.store.scope(state: \.search, action: AppFeature.Action.search)
+///         store: self.store.scope(state: \.search, action: { .search($0) })
 ///       )
 ///       .tabItem { Text("Search") }
 ///
 ///       ProfileView(
-///         store: self.store.scope(state: \.profile, action: AppFeature.Action.profile)
+///         store: self.store.scope(state: \.profile, action: { .profile($0) })
 ///       )
 ///       .tabItem { Text("Profile") }
 ///     }
@@ -133,7 +133,7 @@ public final class Store<State, Action> {
   private var isSending = false
   var parentCancellable: AnyCancellable?
   private let reducer: any Reducer<State, Action>
-  @_spi(Internals) public var state: CurrentValueSubject<State, Never>
+  @_spi(Internals) public var stateSubject: CurrentValueSubject<State, Never>
   #if DEBUG
     private let mainThreadChecksEnabled: Bool
   #endif
@@ -150,6 +150,7 @@ public final class Store<State, Action> {
     @ReducerBuilder<State, Action> reducer: () -> R,
     withDependencies prepareDependencies: ((inout DependencyValues) -> Void)? = nil
   ) where R.State == State, R.Action == Action {
+    defer { Logger.shared.log("\(storeTypeName(of: self)).init") }
     if let prepareDependencies = prepareDependencies {
       let (initialState, reducer) = withDependencies(prepareDependencies) {
         (initialState(), reducer())
@@ -168,6 +169,10 @@ public final class Store<State, Action> {
     }
   }
 
+  deinit {
+    Logger.shared.log("\(storeTypeName(of: self)).deinit")
+  }
+
   /// Calls the given closure with the current state of the store.
   ///
   /// A lightweight way of accessing store state when no view store is available and state does not
@@ -181,7 +186,7 @@ public final class Store<State, Action> {
   ///   you want to observe store state in a view, use a ``ViewStore`` instead.
   /// - Returns: The return value, if any, of the `body` closure.
   public func withState<R>(_ body: (_ state: State) -> R) -> R {
-    body(self.state.value)
+    body(self.stateSubject.value)
   }
 
   /// Sends an action to the store.
@@ -227,8 +232,8 @@ public final class Store<State, Action> {
   /// example:
   ///
   /// ```swift
-  /// // Application state made from child states.
-  /// struct AppFeature: Reducer {
+  /// @Reducer
+  /// struct AppFeature {
   ///   struct State {
   ///     var login: Login.State
   ///     // ...
@@ -265,13 +270,14 @@ public final class Store<State, Action> {
   /// first:
   ///
   /// ```swift
-  /// struct Login: Reducer {
+  /// @Reducer
+  /// struct Login {
   ///   struct State: Equatable {
   ///     var email = ""
   ///     var password = ""
   ///     var twoFactorAuth: TwoFactorAuthState?
   ///   }
-  ///   enum Action: Equatable {
+  ///   enum Action {
   ///     case emailChanged(String)
   ///     case loginButtonTapped
   ///     case loginResponse(Result<TwoFactorAuthState, LoginError>)
@@ -318,7 +324,7 @@ public final class Store<State, Action> {
   ///     var password: String
   ///   }
   ///
-  ///   enum ViewAction: Equatable {
+  ///   enum ViewAction {
   ///     case emailChanged(String)
   ///     case loginButtonTapped
   ///     case passwordChanged(String)
@@ -420,7 +426,7 @@ public final class Store<State, Action> {
       action: { state, action in isInvalid(state) && BindingLocal.isActive ? nil : action },
       removeDuplicates: { isInvalid($0) && isInvalid($1) }
     )
-    store._isInvalidated = { self._isInvalidated() || isInvalid(self.state.value) }
+    store._isInvalidated = { self._isInvalidated() || isInvalid(self.stateSubject.value) }
     return store
   }
 
@@ -435,13 +441,13 @@ public final class Store<State, Action> {
     guard !self.isSending else { return nil }
 
     self.isSending = true
-    var currentState = self.state.value
+    var currentState = self.stateSubject.value
     let tasks = Box<[Task<Void, Never>]>(wrappedValue: [])
     defer {
       withExtendedLifetime(self.bufferedActions) {
         self.bufferedActions.removeAll()
       }
-      self.state.value = currentState
+      self.stateSubject.value = currentState
       self.isSending = false
       if !self.bufferedActions.isEmpty {
         if let task = self.send(
@@ -655,7 +661,7 @@ public final class Store<State, Action> {
     reducer: R,
     mainThreadChecksEnabled: Bool
   ) where R.State == State, R.Action == Action {
-    self.state = CurrentValueSubject(initialState)
+    self.stateSubject = CurrentValueSubject(initialState)
     self.reducer = reducer
     #if DEBUG
       self.mainThreadChecksEnabled = mainThreadChecksEnabled
@@ -673,7 +679,7 @@ public final class Store<State, Action> {
   ///   .sink { ... }
   /// ```
   public var publisher: StorePublisher<State> {
-    StorePublisher(store: self, upstream: self.state)
+    StorePublisher(store: self, upstream: self.stateSubject)
   }
 }
 
@@ -741,7 +747,7 @@ private final class ScopedReducer<RootState, RootAction, State, Action>: Reducer
   func reduce(into state: inout State, action: Action) -> Effect<Action> {
     self.isSending = true
     defer {
-      state = self.toScopedState(self.rootStore.state.value)
+      state = self.toScopedState(self.rootStore.stateSubject.value)
       self.isSending = false
     }
     if let action = self.fromScopedAction(state, action),
@@ -774,25 +780,31 @@ extension ScopedReducer: AnyScopedReducer {
     let fromScopedAction = self.fromScopedAction as! (ScopedState, ScopedAction) -> RootAction?
     let reducer = ScopedReducer<RootState, RootAction, RescopedState, RescopedAction>(
       rootStore: self.rootStore,
-      state: { _ in toRescopedState(store.state.value) },
-      action: { fromRescopedAction($0, $1).flatMap { fromScopedAction(store.state.value, $0) } },
+      state: { _ in toRescopedState(store.stateSubject.value) },
+      action: {
+        fromRescopedAction($0, $1).flatMap { fromScopedAction(store.stateSubject.value, $0) }
+      },
       parentStores: self.parentStores + [store]
     )
     let childStore = Store<RescopedState, RescopedAction>(
-      initialState: toRescopedState(store.state.value)
+      initialState: toRescopedState(store.stateSubject.value)
     ) {
       reducer
     }
     childStore._isInvalidated = store._isInvalidated
-    childStore.parentCancellable = store.state
+    childStore.parentCancellable = store.stateSubject
       .dropFirst()
       .sink { [weak childStore] newValue in
-        guard !reducer.isSending, let childStore = childStore else { return }
+        guard
+          !reducer.isSending,
+          let childStore = childStore
+        else { return }
         let newValue = toRescopedState(newValue)
-        guard isDuplicate.map({ !$0(childStore.state.value, newValue) }) ?? true else {
+        guard isDuplicate.map({ !$0(childStore.stateSubject.value, newValue) }) ?? true else {
           return
         }
-        childStore.state.value = newValue
+        childStore.stateSubject.value = newValue
+        Logger.shared.log("\(storeTypeName(of: store)).scope")
       }
     return childStore
   }
@@ -874,4 +886,87 @@ public struct StoreTask: Hashable, Sendable {
   public var isCancelled: Bool {
     self.rawValue?.isCancelled ?? true
   }
+}
+
+func storeTypeName<State, Action>(of store: Store<State, Action>) -> String {
+  let stateType = typeName(State.self, genericsAbbreviated: false)
+  let actionType = typeName(Action.self, genericsAbbreviated: false)
+  // TODO: `PresentationStoreOf`, `StackStoreOf`, `IdentifiedStoreOf`?
+  if stateType.hasSuffix(".State"),
+    actionType.hasSuffix(".Action"),
+    stateType.dropLast(6) == actionType.dropLast(7)
+  {
+    return "StoreOf<\(stateType.dropLast(6))>"
+  } else if stateType.hasSuffix(".State?"),
+    actionType.hasSuffix(".Action"),
+    stateType.dropLast(7) == actionType.dropLast(7)
+  {
+    return "StoreOf<\(stateType.dropLast(7))?>"
+  } else if stateType.hasPrefix("IdentifiedArray<"),
+    actionType.hasPrefix("IdentifiedAction<"),
+    stateType.dropFirst(16).dropLast(7) == actionType.dropFirst(17).dropLast(8)
+  {
+    return "IdentifiedStoreOf<\(stateType.drop(while: { $0 != "," }).dropFirst(2).dropLast(7))>"
+  } else if stateType.hasPrefix("PresentationState<"),
+    actionType.hasPrefix("PresentationAction<"),
+    stateType.dropFirst(18).dropLast(7) == actionType.dropFirst(19).dropLast(8)
+  {
+    return "PresentationStoreOf<\(stateType.dropFirst(18).dropLast(7))>"
+  } else if stateType.hasPrefix("StackState<"),
+    actionType.hasPrefix("StackAction<"),
+    stateType.dropFirst(11).dropLast(7)
+      == actionType.dropFirst(12).prefix(while: { $0 != "," }).dropLast(6)
+  {
+    return "StackStoreOf<\(stateType.dropFirst(11).dropLast(7))>"
+  } else {
+    return "Store<\(stateType), \(actionType)>"
+  }
+}
+
+// NB: From swift-custom-dump. Consider publicizing interface in some way to keep things in sync.
+func typeName(
+  _ type: Any.Type,
+  qualified: Bool = true,
+  genericsAbbreviated: Bool = true
+) -> String {
+  var name = _typeName(type, qualified: qualified)
+    .replacingOccurrences(
+      of: #"\(unknown context at \$[[:xdigit:]]+\)\."#,
+      with: "",
+      options: .regularExpression
+    )
+  for _ in 1...10 {  // NB: Only handle so much nesting
+    let abbreviated =
+      name
+      .replacingOccurrences(
+        of: #"\bSwift.Optional<([^><]+)>"#,
+        with: "$1?",
+        options: .regularExpression
+      )
+      .replacingOccurrences(
+        of: #"\bSwift.Array<([^><]+)>"#,
+        with: "[$1]",
+        options: .regularExpression
+      )
+      .replacingOccurrences(
+        of: #"\bSwift.Dictionary<([^,<]+), ([^><]+)>"#,
+        with: "[$1: $2]",
+        options: .regularExpression
+      )
+    if abbreviated == name { break }
+    name = abbreviated
+  }
+  name = name.replacingOccurrences(
+    of: #"\w+\.([\w.]+)"#,
+    with: "$1",
+    options: .regularExpression
+  )
+  if genericsAbbreviated {
+    name = name.replacingOccurrences(
+      of: #"<.+>"#,
+      with: "",
+      options: .regularExpression
+    )
+  }
+  return name
 }

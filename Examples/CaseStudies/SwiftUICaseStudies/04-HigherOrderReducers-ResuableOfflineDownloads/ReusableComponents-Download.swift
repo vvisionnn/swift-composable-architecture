@@ -14,7 +14,8 @@ private let readMe = """
   screen to see that the state is carried over.
   """
 
-struct CityMap: Reducer {
+@Reducer
+struct CityMap {
   struct State: Equatable, Identifiable {
     var download: Download
     var downloadAlert: AlertState<DownloadComponent.Action.Alert>?
@@ -54,7 +55,7 @@ struct CityMap: Reducer {
   }
 
   var body: some Reducer<State, Action> {
-    Scope(state: \.downloadComponent, action: /Action.downloadComponent) {
+    Scope(state: \.downloadComponent, action: \.downloadComponent) {
       DownloadComponent()
     }
 
@@ -93,10 +94,7 @@ struct CityMapRowView: View {
           Spacer()
 
           DownloadComponentView(
-            store: self.store.scope(
-              state: \.downloadComponent,
-              action: CityMap.Action.downloadComponent
-            )
+            store: self.store.scope(state: \.downloadComponent, action: { .downloadComponent($0) })
           )
           .padding(.trailing, 8)
         }
@@ -125,10 +123,7 @@ struct CityMapDetailView: View {
           Spacer()
 
           DownloadComponentView(
-            store: self.store.scope(
-              state: \.downloadComponent,
-              action: CityMap.Action.downloadComponent
-            )
+            store: self.store.scope(state: \.downloadComponent, action: { .downloadComponent($0) })
           )
         }
 
@@ -140,33 +135,34 @@ struct CityMapDetailView: View {
   }
 }
 
-struct MapApp: Reducer {
+@Reducer
+struct MapApp {
   struct State: Equatable {
     var cityMaps: IdentifiedArrayOf<CityMap.State>
   }
 
   enum Action {
-    case cityMaps(id: CityMap.State.ID, action: CityMap.Action)
+    case cityMaps(IdentifiedActionOf<CityMap>)
   }
 
   var body: some Reducer<State, Action> {
-    EmptyReducer().forEach(\.cityMaps, action: /Action.cityMaps(id:action:)) {
+    EmptyReducer().forEach(\.cityMaps, action: \.cityMaps) {
       CityMap()
     }
   }
 }
 
 struct CitiesView: View {
-  let store: StoreOf<MapApp>
+  @State var store = Store(initialState: MapApp.State(cityMaps: .mocks)) {
+    MapApp()
+  }
 
   var body: some View {
     Form {
       Section {
         AboutView(readMe: readMe)
       }
-      ForEachStore(
-        self.store.scope(state: \.cityMaps, action: MapApp.Action.cityMaps(id:action:))
-      ) { cityMapStore in
+      ForEachStore(self.store.scope(state: \.cityMaps, action: { .cityMaps($0) })) { cityMapStore in
         CityMapRowView(store: cityMapStore)
           .buttonStyle(.borderless)
       }

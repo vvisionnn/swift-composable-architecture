@@ -3,35 +3,38 @@ import ComposableArchitecture
 import SwiftUI
 import UIKit
 
-struct Counter: Reducer {
+@Reducer
+struct Counter {
   struct State: Equatable, Identifiable {
     let id = UUID()
     var count = 0
   }
 
-  enum Action: Equatable {
+  enum Action {
     case decrementButtonTapped
     case incrementButtonTapped
   }
 
-  func reduce(into state: inout State, action: Action) -> Effect<Action> {
-    switch action {
-    case .decrementButtonTapped:
-      state.count -= 1
-      return .none
-    case .incrementButtonTapped:
-      state.count += 1
-      return .none
+  var body: some Reducer<State, Action> {
+    Reduce { state, action in
+      switch action {
+      case .decrementButtonTapped:
+        state.count -= 1
+        return .none
+      case .incrementButtonTapped:
+        state.count += 1
+        return .none
+      }
     }
   }
 }
 
 final class CounterViewController: UIViewController {
-  let viewStore: ViewStoreOf<Counter>
+  let store: StoreOf<Counter>
   private var cancellables: Set<AnyCancellable> = []
 
   init(store: StoreOf<Counter>) {
-    self.viewStore = ViewStore(store, observe: { $0 })
+    self.store = store
     super.init(nibName: nil, bundle: nil)
   }
 
@@ -68,18 +71,18 @@ final class CounterViewController: UIViewController {
       rootStackView.centerYAnchor.constraint(equalTo: self.view.safeAreaLayoutGuide.centerYAnchor),
     ])
 
-    self.viewStore.publisher
+    self.store.publisher
       .map { "\($0.count)" }
       .assign(to: \.text, on: countLabel)
       .store(in: &self.cancellables)
   }
 
   @objc func decrementButtonTapped() {
-    self.viewStore.send(.decrementButtonTapped)
+    self.store.send(.decrementButtonTapped)
   }
 
   @objc func incrementButtonTapped() {
-    self.viewStore.send(.incrementButtonTapped)
+    self.store.send(.incrementButtonTapped)
   }
 }
 

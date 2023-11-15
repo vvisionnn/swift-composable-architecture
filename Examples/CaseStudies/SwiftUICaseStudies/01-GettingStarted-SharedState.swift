@@ -16,7 +16,8 @@ private let readMe = """
 
 // MARK: - Feature domain
 
-struct SharedState: Reducer {
+@Reducer
+struct SharedState {
   enum Tab { case counter, profile }
 
   struct State: Equatable {
@@ -46,18 +47,18 @@ struct SharedState: Reducer {
     }
   }
 
-  enum Action: Equatable {
+  enum Action {
     case counter(Counter.Action)
     case profile(Profile.Action)
     case selectTab(Tab)
   }
 
   var body: some Reducer<State, Action> {
-    Scope(state: \.counter, action: /Action.counter) {
+    Scope(state: \.counter, action: \.counter) {
       Counter()
     }
 
-    Scope(state: \.profile, action: /Action.profile) {
+    Scope(state: \.profile, action: \.profile) {
       Profile()
     }
 
@@ -72,7 +73,8 @@ struct SharedState: Reducer {
     }
   }
 
-  struct Counter: Reducer {
+  @Reducer
+  struct Counter {
     struct State: Equatable {
       @PresentationState var alert: AlertState<Action.Alert>?
       var count = 0
@@ -81,7 +83,7 @@ struct SharedState: Reducer {
       var numberOfCounts = 0
     }
 
-    enum Action: Equatable {
+    enum Action {
       case alert(PresentationAction<Alert>)
       case decrementButtonTapped
       case incrementButtonTapped
@@ -119,11 +121,12 @@ struct SharedState: Reducer {
           return .none
         }
       }
-      .ifLet(\.$alert, action: /Action.alert)
+      .ifLet(\.$alert, action: \.alert)
     }
   }
 
-  struct Profile: Reducer {
+  @Reducer
+  struct Profile {
     struct State: Equatable {
       private(set) var currentTab: Tab
       private(set) var count = 0
@@ -140,15 +143,17 @@ struct SharedState: Reducer {
       }
     }
 
-    enum Action: Equatable {
+    enum Action {
       case resetCounterButtonTapped
     }
 
-    func reduce(into state: inout State, action: Action) -> Effect<Action> {
-      switch action {
-      case .resetCounterButtonTapped:
-        state.resetCount()
-        return .none
+    var body: some Reducer<State, Action> {
+      Reduce { state, action in
+        switch action {
+        case .resetCounterButtonTapped:
+          state.resetCount()
+          return .none
+        }
       }
     }
   }
@@ -157,15 +162,14 @@ struct SharedState: Reducer {
 // MARK: - Feature view
 
 struct SharedStateView: View {
-  let store: StoreOf<SharedState>
+  @State var store = Store(initialState: SharedState.State()) {
+    SharedState()
+  }
 
   var body: some View {
     WithViewStore(self.store, observe: \.currentTab) { viewStore in
       VStack {
-        Picker(
-          "Tab",
-          selection: viewStore.binding(send: SharedState.Action.selectTab)
-        ) {
+        Picker("Tab", selection: viewStore.binding(send: { .selectTab($0) })) {
           Text("Counter")
             .tag(SharedState.Tab.counter)
 
@@ -176,12 +180,14 @@ struct SharedStateView: View {
 
         if viewStore.state == .counter {
           SharedStateCounterView(
-            store: self.store.scope(state: \.counter, action: SharedState.Action.counter))
+            store: self.store.scope(state: \.counter, action: { .counter($0) })
+          )
         }
 
         if viewStore.state == .profile {
           SharedStateProfileView(
-            store: self.store.scope(state: \.profile, action: SharedState.Action.profile))
+            store: self.store.scope(state: \.profile, action: { .profile($0) })
+          )
         }
 
         Spacer()

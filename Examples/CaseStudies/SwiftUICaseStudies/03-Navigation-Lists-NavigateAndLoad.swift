@@ -10,7 +10,8 @@ private let readMe = """
 
 // MARK: - Feature domain
 
-struct NavigateAndLoadList: Reducer {
+@Reducer
+struct NavigateAndLoadList {
   struct State: Equatable {
     var rows: IdentifiedArrayOf<Row> = [
       Row(count: 1, id: UUID()),
@@ -25,7 +26,7 @@ struct NavigateAndLoadList: Reducer {
     }
   }
 
-  enum Action: Equatable {
+  enum Action {
     case counter(Counter.Action)
     case setNavigation(selection: UUID?)
     case setNavigationSelectionDelayCompleted
@@ -61,9 +62,9 @@ struct NavigateAndLoadList: Reducer {
         return .none
       }
     }
-    .ifLet(\State.selection, action: /Action.counter) {
+    .ifLet(\.selection, action: \.counter) {
       EmptyReducer()
-        .ifLet(\Identified<State.Row.ID, Counter.State?>.value, action: .self) {
+        .ifLet(\.value, action: \.self) {
           Counter()
         }
     }
@@ -73,7 +74,9 @@ struct NavigateAndLoadList: Reducer {
 // MARK: - Feature view
 
 struct NavigateAndLoadListView: View {
-  let store: StoreOf<NavigateAndLoadList>
+  @State var store = Store(initialState: NavigateAndLoadList.State()) {
+    NavigateAndLoadList()
+  }
 
   var body: some View {
     WithViewStore(self.store, observe: { $0 }) { viewStore in
@@ -83,23 +86,18 @@ struct NavigateAndLoadListView: View {
         }
         ForEach(viewStore.rows) { row in
           NavigationLink(
-            destination: IfLetStore(
-              self.store.scope(
-                state: \.selection?.value,
-                action: NavigateAndLoadList.Action.counter
-              )
-            ) {
-              CounterView(store: $0)
-            } else: {
-              ProgressView()
-            },
+            "Load optional counter that starts from \(row.count)",
             tag: row.id,
             selection: viewStore.binding(
               get: \.selection?.id,
-              send: NavigateAndLoadList.Action.setNavigation(selection:)
+              send: { .setNavigation(selection: $0) }
             )
           ) {
-            Text("Load optional counter that starts from \(row.count)")
+            IfLetStore(self.store.scope(state: \.selection?.value, action: { .counter($0) })) {
+              CounterView(store: $0)
+            } else: {
+              ProgressView()
+            }
           }
         }
       }

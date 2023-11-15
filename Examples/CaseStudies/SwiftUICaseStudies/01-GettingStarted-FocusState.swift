@@ -2,13 +2,15 @@ import ComposableArchitecture
 import SwiftUI
 
 private let readMe = """
-  This demonstrates how to make use of SwiftUI's `@FocusState` in the Composable Architecture. \
-  If you tap the "Sign in" button while a field is empty, the focus will be changed to that field.
+  This demonstrates how to make use of SwiftUI's `@FocusState` in the Composable Architecture with \
+  the library's `bind` view modifier. If you tap the "Sign in" button while a field is empty, the \
+  focus will be changed to that field.
   """
 
 // MARK: - Feature domain
 
-struct FocusDemo: Reducer {
+@Reducer
+struct FocusDemo {
   struct State: Equatable {
     @BindingState var focusedField: Field?
     @BindingState var password: String = ""
@@ -19,7 +21,7 @@ struct FocusDemo: Reducer {
     }
   }
 
-  enum Action: BindableAction, Equatable {
+  enum Action: BindableAction {
     case binding(BindingAction<State>)
     case signInButtonTapped
   }
@@ -46,7 +48,9 @@ struct FocusDemo: Reducer {
 // MARK: - Feature view
 
 struct FocusDemoView: View {
-  let store: StoreOf<FocusDemo>
+  @State var store = Store(initialState: FocusDemo.State()) {
+    FocusDemo()
+  }
   @FocusState var focusedField: FocusDemo.State.Field?
 
   var body: some View {
@@ -66,20 +70,10 @@ struct FocusDemoView: View {
         }
         .textFieldStyle(.roundedBorder)
       }
-      .synchronize(viewStore.$focusedField, self.$focusedField)
+      // Synchronize store focus state and local focus state.
+      .bind(viewStore.$focusedField, to: self.$focusedField)
     }
     .navigationTitle("Focus demo")
-  }
-}
-
-extension View {
-  func synchronize<Value>(
-    _ first: Binding<Value>,
-    _ second: FocusState<Value>.Binding
-  ) -> some View {
-    self
-      .onChange(of: first.wrappedValue) { second.wrappedValue = $0 }
-      .onChange(of: second.wrappedValue) { first.wrappedValue = $0 }
   }
 }
 

@@ -20,7 +20,7 @@ extension Store {
   ///   func viewDidLoad() {
   ///     // ...
   ///     self.store
-  ///       .scope(state: \.optionalChild, action: ParentAction.child)
+  ///       .scope(state: \.optionalChild, action: { .child($0) })
   ///       .ifLet(
   ///         then: { [weak self] childStore in
   ///           self?.navigationController?.pushViewController(
@@ -49,7 +49,7 @@ extension Store {
     then unwrap: @escaping (_ store: Store<Wrapped, Action>) -> Void,
     else: @escaping () -> Void = {}
   ) -> Cancellable where State == Wrapped? {
-    return self.state
+    self.stateSubject
       .removeDuplicates(by: { ($0 != nil) == ($1 != nil) })
       .sink { state in
         if var state = state {

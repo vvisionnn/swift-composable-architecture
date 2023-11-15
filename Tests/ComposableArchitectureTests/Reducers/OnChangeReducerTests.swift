@@ -2,6 +2,7 @@ import ComposableArchitecture
 import XCTest
 
 @MainActor
+@available(*, deprecated, message: "TODO: Update to use case pathable syntax with Swift 5.9")
 final class OnChangeReducerTests: BaseTCATestCase {
   func testOnChange() async {
     struct Feature: Reducer {
@@ -136,5 +137,58 @@ final class OnChangeReducerTests: BaseTCATestCase {
     await store.send(.child(1, .incrementButtonTapped)) {
       $0.childStates[id: 1]?.counter = 1
     }
+  }
+
+  func testOnChangeTuple() async {
+    struct Feature: Reducer {
+      struct State: Equatable {
+        var countA = 0
+        var countB = 0
+        var sum = 0
+      }
+      enum Action: Equatable {
+        case incrementButtonTapped
+        case noop
+        case updateSum(Int)
+      }
+      var body: some ReducerOf<Self> {
+        Reduce { state, action in
+          switch action {
+          case .incrementButtonTapped:
+            state.countA += 1
+            state.countB += 1
+            return .none
+          case .noop:
+            return .none
+          case let .updateSum(sum):
+            state.sum = sum
+            return .none
+          }
+        }
+        .onChange(
+          of: { ($0.countA, $0.countB) },
+          removeDuplicates: ==
+        ) { _, _ in
+          Reduce { state, action in
+            return .send(.updateSum(state.countA + state.countB))
+          }
+        }
+      }
+    }
+
+    let store = TestStore(
+      initialState: Feature.State()
+    ) { Feature() }
+
+    await store.send(.incrementButtonTapped) {
+      $0.countA = 1
+      $0.countB = 1
+    }
+
+    await store.receive(.updateSum(2)) {
+      $0.sum = 2
+    }
+
+    await store.send(.noop)
   }
 }

@@ -21,23 +21,24 @@ private let readMe = """
 
 // MARK: - Feature domain
 
-struct AlertAndConfirmationDialog: Reducer {
+@Reducer
+struct AlertAndConfirmationDialog {
   struct State: Equatable {
     @PresentationState var alert: AlertState<Action.Alert>?
     @PresentationState var confirmationDialog: ConfirmationDialogState<Action.ConfirmationDialog>?
     var count = 0
   }
 
-  enum Action: Equatable {
+  enum Action {
     case alert(PresentationAction<Alert>)
     case alertButtonTapped
     case confirmationDialog(PresentationAction<ConfirmationDialog>)
     case confirmationDialogButtonTapped
 
-    enum Alert: Equatable {
+    enum Alert {
       case incrementButtonTapped
     }
-    enum ConfirmationDialog: Equatable {
+    enum ConfirmationDialog {
       case incrementButtonTapped
       case decrementButtonTapped
     }
@@ -97,15 +98,17 @@ struct AlertAndConfirmationDialog: Reducer {
         return .none
       }
     }
-    .ifLet(\.$alert, action: /Action.alert)
-    .ifLet(\.$confirmationDialog, action: /Action.confirmationDialog)
+    .ifLet(\.$alert, action: \.alert)
+    .ifLet(\.$confirmationDialog, action: \.confirmationDialog)
   }
 }
 
 // MARK: - Feature view
 
 struct AlertAndConfirmationDialogView: View {
-  let store: StoreOf<AlertAndConfirmationDialog>
+  @State var store = Store(initialState: AlertAndConfirmationDialog.State()) {
+    AlertAndConfirmationDialog()
+  }
 
   var body: some View {
     WithViewStore(self.store, observe: { $0 }) { viewStore in
