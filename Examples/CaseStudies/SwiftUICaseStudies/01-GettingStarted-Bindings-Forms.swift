@@ -15,7 +15,8 @@ private let readMe = """
 
 // MARK: - Feature domain
 
-struct BindingForm: Reducer {
+@Reducer
+struct BindingForm {
   struct State: Equatable {
     @BindingState var sliderValue = 5.0
     @BindingState var stepCount = 10
@@ -23,7 +24,7 @@ struct BindingForm: Reducer {
     @BindingState var toggleIsOn = false
   }
 
-  enum Action: BindableAction, Equatable {
+  enum Action: BindableAction {
     case binding(BindingAction<State>)
     case resetButtonTapped
   }
@@ -50,7 +51,9 @@ struct BindingForm: Reducer {
 // MARK: - Feature view
 
 struct BindingFormView: View {
-  let store: StoreOf<BindingForm>
+  @State var store = Store(initialState: BindingForm.State()) {
+    BindingForm()
+  }
 
   var body: some View {
     WithViewStore(self.store, observe: { $0 }) { viewStore in

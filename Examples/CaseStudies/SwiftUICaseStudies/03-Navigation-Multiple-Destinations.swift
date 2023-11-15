@@ -6,8 +6,10 @@ private let readMe = """
   piece of enum state.
   """
 
-struct MultipleDestinations: Reducer {
-  public struct Destination: Reducer {
+@Reducer
+struct MultipleDestinations {
+  @Reducer
+  public struct Destination {
     public enum State: Equatable {
       case drillDown(Counter.State)
       case popover(Counter.State)
@@ -21,13 +23,13 @@ struct MultipleDestinations: Reducer {
     }
 
     public var body: some Reducer<State, Action> {
-      Scope(state: /State.drillDown, action: /Action.drillDown) {
+      Scope(state: \.drillDown, action: \.drillDown) {
         Counter()
       }
-      Scope(state: /State.sheet, action: /Action.sheet) {
+      Scope(state: \.sheet, action: \.sheet) {
         Counter()
       }
-      Scope(state: /State.popover, action: /Action.popover) {
+      Scope(state: \.popover, action: \.popover) {
         Counter()
       }
     }
@@ -60,14 +62,16 @@ struct MultipleDestinations: Reducer {
         return .none
       }
     }
-    .ifLet(\.$destination, action: /Action.destination) {
+    .ifLet(\.$destination, action: \.destination) {
       Destination()
     }
   }
 }
 
 struct MultipleDestinationsView: View {
-  let store: StoreOf<MultipleDestinations>
+  @State var store = Store(initialState: MultipleDestinations.State()) {
+    MultipleDestinations()
+  }
 
   var body: some View {
     WithViewStore(self.store, observe: { $0 }) { viewStore in
@@ -86,25 +90,25 @@ struct MultipleDestinationsView: View {
         }
       }
       .navigationDestination(
-        store: store.scope(state: \.$destination, action: { .destination($0) }),
-        state: /MultipleDestinations.Destination.State.drillDown,
-        action: MultipleDestinations.Destination.Action.drillDown
-      ) {
-        CounterView(store: $0)
+        store: self.store.scope(state: \.$destination, action: { .destination($0) }),
+        state: \.drillDown,
+        action: { .drillDown($0) }
+      ) { store in
+        CounterView(store: store)
       }
       .popover(
-        store: store.scope(state: \.$destination, action: { .destination($0) }),
-        state: /MultipleDestinations.Destination.State.popover,
-        action: MultipleDestinations.Destination.Action.popover
-      ) {
-        CounterView(store: $0)
+        store: self.store.scope(state: \.$destination, action: { .destination($0) }),
+        state: \.popover,
+        action: { .popover($0) }
+      ) { store in
+        CounterView(store: store)
       }
       .sheet(
-        store: store.scope(state: \.$destination, action: { .destination($0) }),
-        state: /MultipleDestinations.Destination.State.sheet,
-        action: MultipleDestinations.Destination.Action.sheet
-      ) {
-        CounterView(store: $0)
+        store: self.store.scope(state: \.$destination, action: { .destination($0) }),
+        state: \.sheet,
+        action: { .sheet($0) }
+      ) { store in
+        CounterView(store: store)
       }
     }
   }

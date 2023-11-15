@@ -11,24 +11,27 @@ private let readMe = """
 
 // MARK: - Feature domain
 
-struct Counter: Reducer {
+@Reducer
+struct Counter {
   struct State: Equatable {
     var count = 0
   }
 
-  enum Action: Equatable {
+  enum Action {
     case decrementButtonTapped
     case incrementButtonTapped
   }
 
-  func reduce(into state: inout State, action: Action) -> Effect<Action> {
-    switch action {
-    case .decrementButtonTapped:
-      state.count -= 1
-      return .none
-    case .incrementButtonTapped:
-      state.count += 1
-      return .none
+  var body: some Reducer<State, Action> {
+    Reduce { state, action in
+      switch action {
+      case .decrementButtonTapped:
+        state.count -= 1
+        return .none
+      case .incrementButtonTapped:
+        state.count += 1
+        return .none
+      }
     }
   }
 }
@@ -61,7 +64,9 @@ struct CounterView: View {
 }
 
 struct CounterDemoView: View {
-  let store: StoreOf<Counter>
+  @State var store = Store(initialState: Counter.State()) {
+    Counter()
+  }
 
   var body: some View {
     Form {

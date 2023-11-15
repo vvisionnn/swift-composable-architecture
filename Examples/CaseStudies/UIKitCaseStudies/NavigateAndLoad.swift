@@ -3,13 +3,14 @@ import ComposableArchitecture
 import SwiftUI
 import UIKit
 
-struct EagerNavigation: Reducer {
+@Reducer
+struct EagerNavigation {
   struct State: Equatable {
     var isNavigationActive = false
     var optionalCounter: Counter.State?
   }
 
-  enum Action: Equatable {
+  enum Action {
     case optionalCounter(Counter.Action)
     case setNavigation(isActive: Bool)
     case setNavigationIsActiveDelayCompleted
@@ -42,7 +43,7 @@ struct EagerNavigation: Reducer {
         return .none
       }
     }
-    .ifLet(\.optionalCounter, action: /Action.optionalCounter) {
+    .ifLet(\.optionalCounter, action: \.optionalCounter) {
       Counter()
     }
   }
@@ -51,11 +52,9 @@ struct EagerNavigation: Reducer {
 class EagerNavigationViewController: UIViewController {
   var cancellables: [AnyCancellable] = []
   let store: StoreOf<EagerNavigation>
-  let viewStore: ViewStoreOf<EagerNavigation>
 
   init(store: StoreOf<EagerNavigation>) {
     self.store = store
-    self.viewStore = ViewStore(store, observe: { $0 })
     super.init(nibName: nil, bundle: nil)
   }
 
@@ -81,13 +80,12 @@ class EagerNavigationViewController: UIViewController {
       button.centerYAnchor.constraint(equalTo: self.view.safeAreaLayoutGuide.centerYAnchor),
     ])
 
-    self.viewStore.publisher.isNavigationActive.sink { [weak self] isNavigationActive in
+    self.store.publisher.isNavigationActive.sink { [weak self] isNavigationActive in
       guard let self = self else { return }
       if isNavigationActive {
         self.navigationController?.pushViewController(
           IfLetStoreController(
-            store: self.store
-              .scope(state: \.optionalCounter, action: EagerNavigation.Action.optionalCounter)
+            self.store.scope(state: \.optionalCounter, action: { .optionalCounter($0) })
           ) {
             CounterViewController(store: $0)
           } else: {
@@ -106,12 +104,12 @@ class EagerNavigationViewController: UIViewController {
     super.viewDidAppear(animated)
 
     if !self.isMovingToParent {
-      self.viewStore.send(.setNavigation(isActive: false))
+      self.store.send(.setNavigation(isActive: false))
     }
   }
 
   @objc private func loadOptionalCounterTapped() {
-    self.viewStore.send(.setNavigation(isActive: true))
+    self.store.send(.setNavigation(isActive: true))
   }
 }
 

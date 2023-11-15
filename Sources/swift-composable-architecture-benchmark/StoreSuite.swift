@@ -15,7 +15,7 @@ let storeSuite = BenchmarkSuite(name: "Store") {
         Feature()
       }
     } tearDown: {
-      precondition(count(of: store.state.value, level: level) == 1)
+      precondition(count(of: store.withState { $0 }, level: level) == 1)
       _cancellationCancellables.removeAll()
     }
   }
@@ -27,13 +27,14 @@ let storeSuite = BenchmarkSuite(name: "Store") {
         Feature()
       }
     } tearDown: {
-      precondition(count(of: store.state.value, level: level) == 0)
+      precondition(count(of: store.withState { $0 }, level: level) == 0)
       _cancellationCancellables.removeAll()
     }
   }
 }
 
-private struct Feature: Reducer {
+@Reducer
+private struct Feature {
   struct State {
     @PresentationState var child: State?
     var count = 0
@@ -44,7 +45,7 @@ private struct Feature: Reducer {
     case none
   }
   var body: some ReducerOf<Self> {
-    Reduce<State, Action> { state, action in
+    Reduce { state, action in
       switch action {
       case .child:
         return .none
@@ -55,7 +56,7 @@ private struct Feature: Reducer {
         return .none
       }
     }
-    .ifLet(\.$child, action: /Action.child) {
+    .ifLet(\.$child, action: \.child) {
       Feature()
     }
   }

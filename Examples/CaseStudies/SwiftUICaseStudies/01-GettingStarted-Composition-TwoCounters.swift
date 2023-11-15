@@ -9,22 +9,23 @@ private let readMe = """
 
 // MARK: - Feature domain
 
-struct TwoCounters: Reducer {
+@Reducer
+struct TwoCounters {
   struct State: Equatable {
     var counter1 = Counter.State()
     var counter2 = Counter.State()
   }
 
-  enum Action: Equatable {
+  enum Action {
     case counter1(Counter.Action)
     case counter2(Counter.Action)
   }
 
   var body: some Reducer<State, Action> {
-    Scope(state: \.counter1, action: /Action.counter1) {
+    Scope(state: \.counter1, action: \.counter1) {
       Counter()
     }
-    Scope(state: \.counter2, action: /Action.counter2) {
+    Scope(state: \.counter2, action: \.counter2) {
       Counter()
     }
   }
@@ -33,7 +34,9 @@ struct TwoCounters: Reducer {
 // MARK: - Feature view
 
 struct TwoCountersView: View {
-  let store: StoreOf<TwoCounters>
+  @State var store = Store(initialState: TwoCounters.State()) {
+    TwoCounters()
+  }
 
   var body: some View {
     Form {
@@ -44,17 +47,13 @@ struct TwoCountersView: View {
       HStack {
         Text("Counter 1")
         Spacer()
-        CounterView(
-          store: self.store.scope(state: \.counter1, action: TwoCounters.Action.counter1)
-        )
+        CounterView(store: self.store.scope(state: \.counter1, action: { .counter1($0) }))
       }
 
       HStack {
         Text("Counter 2")
         Spacer()
-        CounterView(
-          store: self.store.scope(state: \.counter2, action: TwoCounters.Action.counter2)
-        )
+        CounterView(store: self.store.scope(state: \.counter2, action: { .counter2($0) }))
       }
     }
     .buttonStyle(.borderless)

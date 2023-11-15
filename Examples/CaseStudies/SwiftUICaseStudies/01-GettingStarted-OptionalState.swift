@@ -14,12 +14,13 @@ private let readMe = """
 
 // MARK: - Feature domain
 
-struct OptionalBasics: Reducer {
+@Reducer
+struct OptionalBasics {
   struct State: Equatable {
     var optionalCounter: Counter.State?
   }
 
-  enum Action: Equatable {
+  enum Action {
     case optionalCounter(Counter.Action)
     case toggleCounterButtonTapped
   }
@@ -37,7 +38,7 @@ struct OptionalBasics: Reducer {
         return .none
       }
     }
-    .ifLet(\.optionalCounter, action: /Action.optionalCounter) {
+    .ifLet(\.optionalCounter, action: \.optionalCounter) {
       Counter()
     }
   }
@@ -46,34 +47,29 @@ struct OptionalBasics: Reducer {
 // MARK: - Feature view
 
 struct OptionalBasicsView: View {
-  let store: StoreOf<OptionalBasics>
+  @State var store = Store(initialState: OptionalBasics.State()) {
+    OptionalBasics()
+  }
 
   var body: some View {
-    WithViewStore(self.store, observe: { $0 }) { viewStore in
-      Form {
-        Section {
-          AboutView(readMe: readMe)
-        }
+    Form {
+      Section {
+        AboutView(readMe: readMe)
+      }
 
-        Button("Toggle counter state") {
-          viewStore.send(.toggleCounterButtonTapped)
-        }
+      Button("Toggle counter state") {
+        self.store.send(.toggleCounterButtonTapped)
+      }
 
-        IfLetStore(
-          self.store.scope(
-            state: \.optionalCounter,
-            action: OptionalBasics.Action.optionalCounter
-          ),
-          then: { store in
-            Text(template: "`CounterState` is non-`nil`")
-            CounterView(store: store)
-              .buttonStyle(.borderless)
-              .frame(maxWidth: .infinity)
-          },
-          else: {
-            Text(template: "`CounterState` is `nil`")
-          }
-        )
+      IfLetStore(
+        self.store.scope(state: \.optionalCounter, action: { .optionalCounter($0) })
+      ) { store in
+        Text(template: "`CounterState` is non-`nil`")
+        CounterView(store: store)
+          .buttonStyle(.borderless)
+          .frame(maxWidth: .infinity)
+      } else: {
+        Text(template: "`CounterState` is `nil`")
       }
     }
     .navigationTitle("Optional state")

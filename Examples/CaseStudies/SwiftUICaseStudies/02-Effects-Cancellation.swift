@@ -14,52 +14,55 @@ private let readMe = """
 
 // MARK: - Feature domain
 
-struct EffectsCancellation: Reducer {
+@Reducer
+struct EffectsCancellation {
   struct State: Equatable {
     var count = 0
     var currentFact: String?
     var isFactRequestInFlight = false
   }
 
-  enum Action: Equatable {
+  enum Action {
     case cancelButtonTapped
     case stepperChanged(Int)
     case factButtonTapped
-    case factResponse(TaskResult<String>)
+    case factResponse(Result<String, Error>)
   }
 
   @Dependency(\.factClient) var factClient
   private enum CancelID { case factRequest }
 
-  func reduce(into state: inout State, action: Action) -> Effect<Action> {
-    switch action {
-    case .cancelButtonTapped:
-      state.isFactRequestInFlight = false
-      return .cancel(id: CancelID.factRequest)
+  var body: some Reducer<State, Action> {
+    Reduce { state, action in
+      switch action {
+      case .cancelButtonTapped:
+        state.isFactRequestInFlight = false
+        return .cancel(id: CancelID.factRequest)
 
-    case let .stepperChanged(value):
-      state.count = value
-      state.currentFact = nil
-      state.isFactRequestInFlight = false
-      return .cancel(id: CancelID.factRequest)
+      case let .stepperChanged(value):
+        state.count = value
+        state.currentFact = nil
+        state.isFactRequestInFlight = false
+        return .cancel(id: CancelID.factRequest)
 
-    case .factButtonTapped:
-      state.currentFact = nil
-      state.isFactRequestInFlight = true
+      case .factButtonTapped:
+        state.currentFact = nil
+        state.isFactRequestInFlight = true
 
-      return .run { [count = state.count] send in
-        await send(.factResponse(TaskResult { try await self.factClient.fetch(count) }))
+        return .run { [count = state.count] send in
+          await send(.factResponse(Result { try await self.factClient.fetch(count) }))
+        }
+        .cancellable(id: CancelID.factRequest)
+
+      case let .factResponse(.success(response)):
+        state.isFactRequestInFlight = false
+        state.currentFact = response
+        return .none
+
+      case .factResponse(.failure):
+        state.isFactRequestInFlight = false
+        return .none
       }
-      .cancellable(id: CancelID.factRequest)
-
-    case let .factResponse(.success(response)):
-      state.isFactRequestInFlight = false
-      state.currentFact = response
-      return .none
-
-    case .factResponse(.failure):
-      state.isFactRequestInFlight = false
-      return .none
     }
   }
 }
@@ -67,7 +70,9 @@ struct EffectsCancellation: Reducer {
 // MARK: - Feature view
 
 struct EffectsCancellationView: View {
-  let store: StoreOf<EffectsCancellation>
+  @State var store = Store(initialState: EffectsCancellation.State()) {
+    EffectsCancellation()
+  }
   @Environment(\.openURL) var openURL
 
   var body: some View {
@@ -80,7 +85,7 @@ struct EffectsCancellationView: View {
         Section {
           Stepper(
             "\(viewStore.count)",
-            value: viewStore.binding(get: \.count, send: EffectsCancellation.Action.stepperChanged)
+            value: viewStore.binding(get: \.count, send: { .stepperChanged($0) })
           )
 
           if viewStore.isFactRequestInFlight {

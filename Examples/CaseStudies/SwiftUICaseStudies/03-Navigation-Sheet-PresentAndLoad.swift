@@ -10,7 +10,8 @@ private let readMe = """
 
 // MARK: - Feature domain
 
-struct PresentAndLoad: Reducer {
+@Reducer
+struct PresentAndLoad {
   struct State: Equatable {
     var optionalCounter: Counter.State?
     var isSheetPresented = false
@@ -49,7 +50,7 @@ struct PresentAndLoad: Reducer {
         return .none
       }
     }
-    .ifLet(\.optionalCounter, action: /Action.optionalCounter) {
+    .ifLet(\.optionalCounter, action: \.optionalCounter) {
       Counter()
     }
   }
@@ -58,7 +59,9 @@ struct PresentAndLoad: Reducer {
 // MARK: - Feature view
 
 struct PresentAndLoadView: View {
-  let store: StoreOf<PresentAndLoad>
+  @State var store = Store(initialState: PresentAndLoad.State()) {
+    PresentAndLoad()
+  }
 
   var body: some View {
     WithViewStore(self.store, observe: { $0 }) { viewStore in
@@ -73,15 +76,10 @@ struct PresentAndLoadView: View {
       .sheet(
         isPresented: viewStore.binding(
           get: \.isSheetPresented,
-          send: PresentAndLoad.Action.setSheet(isPresented:)
+          send: { .setSheet(isPresented: $0) }
         )
       ) {
-        IfLetStore(
-          self.store.scope(
-            state: \.optionalCounter,
-            action: PresentAndLoad.Action.optionalCounter
-          )
-        ) {
+        IfLetStore(self.store.scope(state: \.optionalCounter, action: { .optionalCounter($0) })) {
           CounterView(store: $0)
         } else: {
           ProgressView()

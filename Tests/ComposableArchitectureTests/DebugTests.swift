@@ -98,18 +98,77 @@
     }
 
     @MainActor
-    func testDebugReducer() async {
-      struct DebuggedReducer: Reducer {
-        typealias State = Int
-        typealias Action = Bool
-        func reduce(into state: inout Int, action: Bool) -> Effect<Bool> {
+    func testDebugReducer() async throws {
+      let logs = LockIsolated<String>("")
+      let printer = _ReducerPrinter<Int, Bool>(
+        printChange: { action, oldState, newState in
+          logs.withValue { _ = dump(action, to: &$0) }
+        }
+      )
+
+      let store = Store<Int, Bool>(initialState: 0) {
+        Reduce<Int, Bool>(internal: { state, action in
           state += action ? 1 : -1
           return .none
-        }
+        })
+        ._printChanges(printer)
       }
+      store.send(true)
+      try await Task.sleep(nanoseconds: 300_000_000)
+      XCTAssertNoDifference(
+        logs.value,
+        """
+        - true
 
-      let store = TestStore(initialState: 0) { DebuggedReducer()._printChanges() }
-      await store.send(true) { $0 = 1 }
+        """
+      )
+    }
+
+    func testDebugReducer_Order() {
+      let logs = LockIsolated<String>("")
+      let printer = _ReducerPrinter<Int, Bool>(
+        printChange: { action, oldState, newState in
+          logs.withValue { _ = dump(action, to: &$0) }
+        }
+      )
+
+      let store = Store<Int, Bool>(initialState: 0) {
+        Reduce<Int, Bool>(internal: { state, action in
+          state += action ? 1 : -1
+          return .run { _ in await Task.yield() }
+        })
+        ._printChanges(printer)
+        ._printChanges(printer)
+        ._printChanges(printer)
+        ._printChanges(printer)
+      }
+      store.send(true)
+      store.send(false)
+      store.send(true)
+      store.send(false)
+      _ = XCTWaiter.wait(for: [self.expectation(description: "wait")], timeout: 0.3)
+      XCTAssertNoDifference(
+        logs.value,
+        """
+        - true
+        - true
+        - true
+        - true
+        - false
+        - false
+        - false
+        - false
+        - true
+        - true
+        - true
+        - true
+        - false
+        - false
+        - false
+        - false
+
+        """
+      )
     }
   }
 #endif

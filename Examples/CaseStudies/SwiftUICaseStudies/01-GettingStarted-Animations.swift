@@ -20,7 +20,8 @@ private let readMe = """
 
 // MARK: - Feature domain
 
-struct Animations: Reducer {
+@Reducer
+struct Animations {
   struct State: Equatable {
     @PresentationState var alert: AlertState<Action.Alert>?
     var circleCenter: CGPoint?
@@ -28,7 +29,7 @@ struct Animations: Reducer {
     var isCircleScaled = false
   }
 
-  enum Action: Equatable, Sendable {
+  enum Action: Sendable {
     case alert(PresentationAction<Alert>)
     case circleScaleToggleChanged(Bool)
     case rainbowButtonTapped
@@ -36,7 +37,7 @@ struct Animations: Reducer {
     case setColor(Color)
     case tapped(CGPoint)
 
-    enum Alert: Equatable, Sendable {
+    enum Alert: Sendable {
       case resetConfirmationButtonTapped
     }
   }
@@ -93,14 +94,16 @@ struct Animations: Reducer {
         return .none
       }
     }
-    .ifLet(\.$alert, action: /Action.alert)
+    .ifLet(\.$alert, action: \.alert)
   }
 }
 
 // MARK: - Feature view
 
 struct AnimationsView: View {
-  let store: StoreOf<Animations>
+  @State var store = Store(initialState: Animations.State()) {
+    Animations()
+  }
 
   var body: some View {
     WithViewStore(self.store, observe: { $0 }) { viewStore in
@@ -135,7 +138,7 @@ struct AnimationsView: View {
           "Big mode",
           isOn:
             viewStore
-            .binding(get: \.isCircleScaled, send: Animations.Action.circleScaleToggleChanged)
+            .binding(get: \.isCircleScaled, send: { .circleScaleToggleChanged($0) })
             .animation(.interactiveSpring(response: 0.25, dampingFraction: 0.1))
         )
         .padding()

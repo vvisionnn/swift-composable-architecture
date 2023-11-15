@@ -20,7 +20,8 @@ private let readMe = """
 
 // MARK: - Feature domain
 
-struct BindingBasics: Reducer {
+@Reducer
+struct BindingBasics {
   struct State: Equatable {
     var sliderValue = 5.0
     var stepCount = 10
@@ -35,24 +36,26 @@ struct BindingBasics: Reducer {
     case toggleChanged(isOn: Bool)
   }
 
-  func reduce(into state: inout State, action: Action) -> Effect<Action> {
-    switch action {
-    case let .sliderValueChanged(value):
-      state.sliderValue = value
-      return .none
+  var body: some Reducer<State, Action> {
+    Reduce { state, action in
+      switch action {
+      case let .sliderValueChanged(value):
+        state.sliderValue = value
+        return .none
 
-    case let .stepCountChanged(count):
-      state.sliderValue = .minimum(state.sliderValue, Double(count))
-      state.stepCount = count
-      return .none
+      case let .stepCountChanged(count):
+        state.sliderValue = .minimum(state.sliderValue, Double(count))
+        state.stepCount = count
+        return .none
 
-    case let .textChanged(text):
-      state.text = text
-      return .none
+      case let .textChanged(text):
+        state.text = text
+        return .none
 
-    case let .toggleChanged(isOn):
-      state.toggleIsOn = isOn
-      return .none
+      case let .toggleChanged(isOn):
+        state.toggleIsOn = isOn
+        return .none
+      }
     }
   }
 }
@@ -60,7 +63,9 @@ struct BindingBasics: Reducer {
 // MARK: - Feature view
 
 struct BindingBasicsView: View {
-  let store: StoreOf<BindingBasics>
+  @State var store = Store(initialState: BindingBasics.State()) {
+    BindingBasics()
+  }
 
   var body: some View {
     WithViewStore(self.store, observe: { $0 }) { viewStore in
@@ -72,7 +77,7 @@ struct BindingBasicsView: View {
         HStack {
           TextField(
             "Type here",
-            text: viewStore.binding(get: \.text, send: BindingBasics.Action.textChanged)
+            text: viewStore.binding(get: \.text, send: { .textChanged($0) })
           )
           .disableAutocorrection(true)
           .foregroundStyle(viewStore.toggleIsOn ? Color.secondary : .primary)
@@ -82,13 +87,13 @@ struct BindingBasicsView: View {
 
         Toggle(
           "Disable other controls",
-          isOn: viewStore.binding(get: \.toggleIsOn, send: BindingBasics.Action.toggleChanged)
+          isOn: viewStore.binding(get: \.toggleIsOn, send: { .toggleChanged(isOn: $0) })
             .resignFirstResponder()
         )
 
         Stepper(
           "Max slider value: \(viewStore.stepCount)",
-          value: viewStore.binding(get: \.stepCount, send: BindingBasics.Action.stepCountChanged),
+          value: viewStore.binding(get: \.stepCount, send: { .stepCountChanged($0) }),
           in: 0...100
         )
         .disabled(viewStore.toggleIsOn)
@@ -96,10 +101,7 @@ struct BindingBasicsView: View {
         HStack {
           Text("Slider value: \(Int(viewStore.sliderValue))")
           Slider(
-            value: viewStore.binding(
-              get: \.sliderValue,
-              send: BindingBasics.Action.sliderValueChanged
-            ),
+            value: viewStore.binding(get: \.sliderValue, send: { .sliderValueChanged($0) }),
             in: 0...Double(viewStore.stepCount)
           )
           .tint(.accentColor)

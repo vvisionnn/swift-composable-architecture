@@ -17,31 +17,34 @@ private let readMe = """
 
 // MARK: - Feature domain
 
-struct LongLivingEffects: Reducer {
+@Reducer
+struct LongLivingEffects {
   struct State: Equatable {
     var screenshotCount = 0
   }
 
-  enum Action: Equatable {
+  enum Action {
     case task
     case userDidTakeScreenshotNotification
   }
 
   @Dependency(\.screenshots) var screenshots
 
-  func reduce(into state: inout State, action: Action) -> Effect<Action> {
-    switch action {
-    case .task:
-      // When the view appears, start the effect that emits when screenshots are taken.
-      return .run { send in
-        for await _ in await self.screenshots() {
-          await send(.userDidTakeScreenshotNotification)
+  var body: some Reducer<State, Action> {
+    Reduce { state, action in
+      switch action {
+      case .task:
+        // When the view appears, start the effect that emits when screenshots are taken.
+        return .run { send in
+          for await _ in await self.screenshots() {
+            await send(.userDidTakeScreenshotNotification)
+          }
         }
-      }
 
-    case .userDidTakeScreenshotNotification:
-      state.screenshotCount += 1
-      return .none
+      case .userDidTakeScreenshotNotification:
+        state.screenshotCount += 1
+        return .none
+      }
     }
   }
 }
@@ -69,7 +72,9 @@ private enum ScreenshotsKey: DependencyKey {
 // MARK: - Feature view
 
 struct LongLivingEffectsView: View {
-  let store: StoreOf<LongLivingEffects>
+  @State var store = Store(initialState: LongLivingEffects.State()) {
+    LongLivingEffects()
+  }
 
   var body: some View {
     WithViewStore(self.store, observe: { $0 }) { viewStore in

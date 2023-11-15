@@ -1,4 +1,4 @@
-struct ContentView: View {
+struct ContactsView: View {
   let store: StoreOf<ContactsFeature>
 
   var body: some View {
@@ -32,7 +32,7 @@ struct ContentView: View {
     }
     .sheet(
       store: self.store.scope(state: \.$destination, action: { .destination($0) }),
-      state: /ContactsFeature.Destination.State.addContact,
+      state: \.addContact,
       action:
     ) { addContactStore in
       NavigationStack {
