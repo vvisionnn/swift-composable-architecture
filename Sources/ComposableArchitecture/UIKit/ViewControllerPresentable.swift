@@ -79,14 +79,14 @@ extension ViewControllerPresentable {
 					guard let wrappedState else { return }
 					let originalId = toID(presentationState)
 					let freshViewController = store.scope(
-						state: returningLastNonNilValue { originalId == toID(store.state.value) ? $0.wrappedValue : nil },
+						state: returningLastNonNilValue { originalId == toID(store.stateSubject.value) ? $0.wrappedValue : nil },
 						action: { .presented($0) }
 					).map({ toDestinationController(wrappedState, $0) }) ?? PresentationViewController(nibName: nil, bundle: nil)
 					let isAnimatePresentation = shouldAnimatePresentation?(wrappedState) ?? true
 					let isAnimateDismiss = shouldAnimateDismiss?(wrappedState) ?? true
 					freshViewController.onDismiss = { @MainActor [weak store] in
-						guard let _store = store, toID(_store.state.value) == originalId else { return }
-						guard _store.state.value.wrappedValue != nil else { return }
+						guard let _store = store, toID(_store.stateSubject.value) == originalId else { return }
+						guard _store.stateSubject.value.wrappedValue != nil else { return }
 						_store.send(.dismiss)
 					}
 					if shouldDismiss {
