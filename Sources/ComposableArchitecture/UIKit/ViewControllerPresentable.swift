@@ -9,7 +9,7 @@ public protocol ViewControllerPresentable: UIViewController {
 extension ViewControllerPresentable {
 	@MainActor
 	public func checkDismissedIfNeeded() {
-		guard self.isBeingDismissed else { return }
+		guard self.isBeingDismissed, !(self.parent?.isBeingDismissed ?? false) else { return }
 		defer { onDismiss = nil }
 		onDismiss?()
 	}
@@ -19,9 +19,17 @@ extension ViewControllerPresentable {
 	@MainActor
 	public func presentation<State: Equatable, Action>(
 		_ store: Store<PresentationState<State>, PresentationAction<Action>>,
-		_ toDestinationControllerInfo: @escaping (State, Store<State, Action>) -> (any ViewControllerPresentable, Bool)
+		_ toDestinationControllerInfo: @escaping (State, Store<State, Action>) -> any ViewControllerPresentable,
+		shouldAnimatePresentation: ((State) -> Bool)? = nil,
+		shouldAnimateDismiss: ((State) -> Bool)? = nil
 	) -> AnyCancellable {
-		self.presentation(store, id: { $0.id }, toDestinationControllerInfo)
+		self.presentation(
+			store,
+			id: { $0.id },
+			toDestinationControllerInfo,
+			shouldAnimatePresentation: shouldAnimatePresentation,
+			shouldAnimateDismiss: shouldAnimateDismiss
+		)
 	}
 	
 	@MainActor
@@ -29,14 +37,16 @@ extension ViewControllerPresentable {
 		_ store: Store<PresentationState<State>, PresentationAction<Action>>,
 		_ toDestinationController: @escaping (State, Store<State, Action>) -> any ViewControllerPresentable
 	) -> AnyCancellable {
-		self.presentation(store, id: { $0.id }, { (toDestinationController($0, $1), self.canAnimate) })
+		self.presentation(store, id: { $0.id }, toDestinationController)
 	}
 	
 	@MainActor
 	func presentation<State: Equatable, Action, ID: Hashable>(
 		_ store: Store<PresentationState<State>, PresentationAction<Action>>,
 		id toID: @escaping (PresentationState<State>) -> ID?,
-		_ toDestinationController: @escaping (State, Store<State, Action>) -> (any ViewControllerPresentable, Bool)
+		_ toDestinationController: @escaping (State, Store<State, Action>) -> any ViewControllerPresentable,
+		shouldAnimatePresentation: ((State) -> Bool)? = nil,
+		shouldAnimateDismiss: ((State) -> Bool)? = nil
 	) -> AnyCancellable {
 		ViewStore(store, observe: { $0 }, removeDuplicates: { toID($0) == toID($1) })
 			.publisher
@@ -52,9 +62,10 @@ extension ViewControllerPresentable {
 					case (.none, .none):
 						return
 						
-					case (.some, .none):
+					case let (.some(prevState), .none):
 						guard self.presentedViewController != nil else { return }
-						await self.dismissAsync(animated: self.canAnimate)
+						let isAnimateDismiss = shouldAnimateDismiss?(prevState) ?? true
+						await self.dismissAsync(animated: isAnimateDismiss)
 						return
 					
 					case let (.none, .some(_state)):
@@ -71,25 +82,24 @@ extension ViewControllerPresentable {
 					let freshViewControllerInfo = store.scope(
 						state: returningLastNonNilValue { originalId == toID(store.stateSubject.value) ? $0.wrappedValue : nil },
 						action: { .presented($0) }
-					).map({ toDestinationController(wrappedState, $0) })
-					let freshViewController = freshViewControllerInfo?.0 ?? PresentationViewController(nibName: nil, bundle: nil)
-					let isAnimated = freshViewControllerInfo?.1 ?? self.canAnimate
+					).map({ toDestinationController(wrappedState, $0) }) ?? PresentationViewController(nibName: nil, bundle: nil)
+					let isAnimatePresentation = shouldAnimatePresentation?(wrappedState) ?? true
+					let isAnimateDismiss = shouldAnimateDismiss?(wrappedState) ?? true
 					freshViewController.onDismiss = { @MainActor [weak store] in
 						guard let _store = store, toID(_store.stateSubject.value) == originalId else { return }
+						guard _store.state.value.wrappedValue != nil else { return }
 						_store.send(.dismiss)
 					}
 					if shouldDismiss {
-						await self.dismissAsync(animated: isAnimated)
+						await self.dismissAsync(animated: isAnimateDismiss)
 					}
-					await self.presentAsync(freshViewController, animated: isAnimated)
+					await self.presentAsync(freshViewController, animated: isAnimatePresentation)
 				}
 			}
 	}
 }
 
 extension UIViewController {
-	fileprivate var canAnimate: Bool { self.viewIfLoaded?.window != nil }
-	
 	@MainActor
 	fileprivate func presentAsync(_ viewControllerToPresent: UIViewController, animated: Bool) async {
 		await withCheckedContinuation { continuation in
