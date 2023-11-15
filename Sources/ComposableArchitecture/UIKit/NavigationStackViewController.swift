@@ -66,7 +66,7 @@ open class NavigationStackViewController<
 			}
 	}
 	
-	public func navigationController(
+	open func navigationController(
 		_ navigationController: UINavigationController,
 		willShow viewController: UIViewController,
 		animated: Bool
