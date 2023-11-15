@@ -1,3 +1,4 @@
+#if canImport(UIKit) && !os(watchOS)
 import UIKit
 
 open class PresentationDocumentPickerViewController: UIDocumentPickerViewController, ViewControllerPresentable {
@@ -8,3 +9,4 @@ open class PresentationDocumentPickerViewController: UIDocumentPickerViewControl
 		checkDismissedIfNeeded()
 	}
 }
+#endif

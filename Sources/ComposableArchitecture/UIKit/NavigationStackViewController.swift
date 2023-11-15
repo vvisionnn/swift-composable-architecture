@@ -1,3 +1,4 @@
+#if canImport(UIKit) && !os(watchOS)
 import UIKit
 import OrderedCollections
 import Combine
@@ -50,9 +51,9 @@ open class NavigationStackViewController<
 					.reduce(into: Destinations(), { partialResult, id in
 						if let originalViewController = self.destinations[id] {
 							partialResult[id] = originalViewController
-						} else if let state = store.state.value[id: id] {
+						} else if let state = store.stateSubject.value[id: id] {
 							partialResult[id] = destination(state, store.scope(
-								state: returningLastNonNilValue({ _ in store.state.value[id: id] }, defaultValue: state),
+								state: returningLastNonNilValue({ _ in store.stateSubject.value[id: id] }, defaultValue: state),
 								action: { .element(id: id, action: $0) }
 							))
 						}
@@ -116,3 +117,4 @@ fileprivate func returningLastNonNilValue<A, B>(_ f: @escaping (A) -> B?, defaul
 		return lastWrapped
 	}
 }
+#endif

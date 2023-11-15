@@ -5,6 +5,7 @@
 //  Created by Andy Wen on 2023/7/31.
 //
 
+#if canImport(UIKit) && !os(watchOS)
 import UIKit
 
 open class NavigationPresentationViewController: UINavigationController, ViewControllerPresentable {
@@ -15,3 +16,4 @@ open class NavigationPresentationViewController: UINavigationController, ViewCon
 		checkDismissedIfNeeded()
 	}
 }
+#endif

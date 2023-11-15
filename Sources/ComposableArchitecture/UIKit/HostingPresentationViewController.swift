@@ -5,6 +5,7 @@
 //  Created by Andy Wen on 2023/7/31.
 //
 
+#if canImport(UIKit) && !os(watchOS)
 import SwiftUI
 
 open class HostingPresentationViewController<Content: View>: UIHostingController<Content>, ViewControllerPresentable {
@@ -15,3 +16,4 @@ open class HostingPresentationViewController<Content: View>: UIHostingController
 		checkDismissedIfNeeded()
 	}
 }
+#endif

@@ -1,3 +1,4 @@
+#if canImport(UIKit) && !os(watchOS)
 import UIKit
 import Combine
 
@@ -68,13 +69,13 @@ extension ViewControllerPresentable {
 					guard let wrappedState else { return }
 					let originalId = toID(presentationState)
 					let freshViewControllerInfo = store.scope(
-						state: returningLastNonNilValue { originalId == toID(store.state.value) ? $0.wrappedValue : nil },
+						state: returningLastNonNilValue { originalId == toID(store.stateSubject.value) ? $0.wrappedValue : nil },
 						action: { .presented($0) }
 					).map({ toDestinationController(wrappedState, $0) })
 					let freshViewController = freshViewControllerInfo?.0 ?? PresentationViewController(nibName: nil, bundle: nil)
 					let isAnimated = freshViewControllerInfo?.1 ?? self.canAnimate
 					freshViewController.onDismiss = { @MainActor [weak store] in
-						guard let _store = store, toID(_store.state.value) == originalId else { return }
+						guard let _store = store, toID(_store.stateSubject.value) == originalId else { return }
 						_store.send(.dismiss)
 					}
 					if shouldDismiss {
@@ -133,3 +134,4 @@ extension Publisher {
 		scan((initialPreviousValue, initialPreviousValue)) { ($0.1, $1) }.eraseToAnyPublisher()
 	}
 }
+#endif

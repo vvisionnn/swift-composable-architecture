@@ -1,3 +1,4 @@
+#if canImport(UIKit) && !os(watchOS)
 import UIKit
 import Combine
 
@@ -9,3 +10,4 @@ open class PresentationViewController: UIViewController, ViewControllerPresentab
 		checkDismissedIfNeeded()
 	}
 }
+#endif
