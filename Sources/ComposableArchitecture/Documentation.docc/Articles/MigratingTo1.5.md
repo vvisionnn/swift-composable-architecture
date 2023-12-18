@@ -11,7 +11,7 @@ in favor of newer ones. We recommend people update their code as quickly as poss
 APIs, and this article contains some tips for doing so.
 
 > Important: Many APIs have been soft-deprecated in this release and will be hard-deprecated in
-a future minor release. We highly recommend updating your user of deprecated APIs to their newest
+a future minor release. We highly recommend updating your use of deprecated APIs to their newest
 version as quickly as possible.
 
 * [Store scoping with key paths](#Store-scoping-with-key-paths)
@@ -139,6 +139,28 @@ ChildView(
     state: \.[settings: viewStore.settings], 
     action: \.child
   )
+)
+```
+
+Another common case you may encounter is when dealing with collections. It is common in the 
+Composable Architecture to use an `IdentifiedArray` in your feature's state and an
+``IdentifiedAction`` in your feature's actions (see <doc:MigratingTo1.4#Identified-actions> for more
+info on ``IdentifiedAction``). If you needed to scope your store down to one specific row of the
+identified domain, previously you would have done so like this:
+
+```swift
+store.scope(
+  state: \.rows[id: id],
+  action: { .rows(.element(id: id, action: $0)) }
+)
+```
+
+With case key paths it can be done simply like this:
+
+```swift
+store.scope(
+  state: \.rows[id: id],
+  action: \.rows[id: id]
 )
 ```
 

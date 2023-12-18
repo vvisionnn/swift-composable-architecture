@@ -20,6 +20,11 @@ SwiftUI, UIKit, and more, and on any Apple platform (iOS, macOS, tvOS, and watch
 
 ## What is the Composable Architecture?
 
+> [!Important]
+> We are currently running a [public beta](https://github.com/pointfreeco/swift-composable-architecture/discussions/2594)
+> for the new observation tools being introduced to the library. Be sure to check it out to get a peek
+> at what the future of the library looks like.
+
 This library provides a few core tools that can be used to build applications of varying purpose and 
 complexity. It provides compelling stories that you can follow to solve many problems you encounter 
 day-to-day when building applications, such as:
@@ -559,15 +564,16 @@ advanced usages.
 The documentation for releases and `main` are available here:
 
 * [`main`](https://pointfreeco.github.io/swift-composable-architecture/main/documentation/composablearchitecture/)
-* [1.4.0](https://pointfreeco.github.io/swift-composable-architecture/1.4.0/documentation/composablearchitecture/)
+* [1.5.0](https://pointfreeco.github.io/swift-composable-architecture/1.5.0/documentation/composablearchitecture/)
 
 <details>
   <summary>
   Other versions
   </summary>
 
-  * [1.3.0](https://pointfreeco.github.io/swift-composable-architecture/1.1.0/documentation/composablearchitecture/)
-  * [1.2.0](https://pointfreeco.github.io/swift-composable-architecture/1.1.0/documentation/composablearchitecture/)
+  * [1.4.0](https://pointfreeco.github.io/swift-composable-architecture/1.4.0/documentation/composablearchitecture/)
+  * [1.3.0](https://pointfreeco.github.io/swift-composable-architecture/1.3.0/documentation/composablearchitecture/)
+  * [1.2.0](https://pointfreeco.github.io/swift-composable-architecture/1.2.0/documentation/composablearchitecture/)
   * [1.1.0](https://pointfreeco.github.io/swift-composable-architecture/1.1.0/documentation/composablearchitecture/)
   * [1.0.0](https://pointfreeco.github.io/swift-composable-architecture/1.0.0/documentation/composablearchitecture/)
   * [0.59.0](https://pointfreeco.github.io/swift-composable-architecture/0.59.0/documentation/composablearchitecture/)

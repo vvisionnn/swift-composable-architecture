@@ -133,7 +133,8 @@ import SwiftUI
 /// of the store are also checked to make sure that work is performed on the main thread.
 public final class Store<State, Action> {
   private var bufferedActions: [Action] = []
-  fileprivate var children: [AnyHashable: AnyObject] = [:]
+  fileprivate var canCacheChildren = true
+  fileprivate var children: [ScopeID<State, Action>: AnyObject] = [:]
   @_spi(Internals) public var effectCancellables: [UUID: AnyCancellable] = [:]
   var _isInvalidated = { false }
   private var isSending = false
@@ -388,7 +389,7 @@ public final class Store<State, Action> {
   ) -> Store<ChildState, ChildAction> {
     self.scope(
       state: { $0[keyPath: state] },
-      id: { _ in Scope(state: state, action: action) },
+      id: self.id(state: state, action: action),
       action: { action($0) },
       isInvalid: nil,
       removeDuplicates: nil
@@ -462,9 +463,9 @@ public final class Store<State, Action> {
     )
   }
 
-  func scope<ChildState, ChildAction>(
+  @_spi(Internals) public func scope<ChildState, ChildAction>(
     state toChildState: @escaping (State) -> ChildState,
-    id: ((State) -> AnyHashable)?,
+    id: ScopeID<State, Action>?,
     action fromChildAction: @escaping (ChildAction) -> Action,
     isInvalid: ((State) -> Bool)?,
     removeDuplicates isDuplicate: ((ChildState, ChildState) -> Bool)?
@@ -486,7 +487,7 @@ public final class Store<State, Action> {
     }
   }
 
-  fileprivate func invalidateChild(id: AnyHashable) {
+  fileprivate func invalidateChild(id: ScopeID<State, Action>) {
     guard self.children.keys.contains(id) else { return }
     (self.children[id] as? any AnyStore)?.invalidate()
     self.children[id] = nil
@@ -744,10 +745,17 @@ public final class Store<State, Action> {
     StorePublisher(store: self, upstream: self.stateSubject)
   }
 
-  private struct Scope<ChildState, ChildAction>: Hashable {
-    let state: KeyPath<State, ChildState>
-    let action: CaseKeyPath<Action, ChildAction>
+  @_spi(Internals) public func id<ChildState, ChildAction>(
+    state: KeyPath<State, ChildState>,
+    action: CaseKeyPath<Action, ChildAction>
+  ) -> ScopeID<State, Action> {
+    ScopeID(state: state, action: action)
   }
+}
+
+@_spi(Internals) public struct ScopeID<State, Action>: Hashable {
+  let state: PartialKeyPath<State>
+  let action: PartialCaseKeyPath<Action>
 }
 
 extension Store: CustomDebugStringConvertible {
@@ -855,6 +863,7 @@ private protocol AnyStore {
 
 private protocol _OptionalProtocol {}
 extension Optional: _OptionalProtocol {}
+extension PresentationState: _OptionalProtocol {}
 
 func storeTypeName<State, Action>(of store: Store<State, Action>) -> String {
   let stateType = typeName(State.self, genericsAbbreviated: false)
@@ -943,7 +952,7 @@ extension Reducer {
   fileprivate func scope<ChildState, ChildAction>(
     store: Store<State, Action>,
     state toChildState: @escaping (State) -> ChildState,
-    id: ((State) -> AnyHashable)?,
+    id: ScopeID<State, Action>?,
     action fromChildAction: @escaping (ChildAction) -> Action,
     isInvalid: ((State) -> Bool)?,
     removeDuplicates isDuplicate: ((ChildState, ChildState) -> Bool)?
@@ -962,7 +971,7 @@ extension Reducer {
 private final class ScopedStoreReducer<RootState, RootAction, State, Action>: Reducer {
   private let rootStore: Store<RootState, RootAction>
   private let toState: (RootState) -> State
-  private let fromAction: (Action) -> RootAction?
+  private let fromAction: (Action) -> RootAction
   private let isInvalid: () -> Bool
   private let onInvalidate: () -> Void
   private(set) var isSending = false
@@ -971,7 +980,7 @@ private final class ScopedStoreReducer<RootState, RootAction, State, Action>: Re
   init(
     rootStore: Store<RootState, RootAction>,
     state toState: @escaping (RootState) -> State,
-    action fromAction: @escaping (Action) -> RootAction?,
+    action fromAction: @escaping (Action) -> RootAction,
     isInvalid: @escaping () -> Bool,
     onInvalidate: @escaping () -> Void
   ) {
@@ -994,17 +1003,19 @@ private final class ScopedStoreReducer<RootState, RootAction, State, Action>: Re
 
   @inlinable
   func reduce(into state: inout State, action: Action) -> Effect<Action> {
-    if self.isInvalid() {
-      self.onInvalidate()
-    }
     self.isSending = true
     defer {
-      state = self.toState(self.rootStore.stateSubject.value)
+      let isInvalid = self.isInvalid()
+      if isInvalid {
+        self.onInvalidate()
+      }
+      if !isInvalid || state is _OptionalProtocol {
+        state = self.toState(self.rootStore.stateSubject.value)
+      }
       self.isSending = false
     }
-    if let action = self.fromAction(action),
-      let task = self.rootStore.send(action, originatingFrom: nil)
-    {
+    if BindingLocal.isActive && isInvalid() { return .none }
+    if let task = self.rootStore.send(self.fromAction(action), originatingFrom: nil) {
       return .run { _ in await task.cancellableValue }
     } else {
       return .none
@@ -1016,7 +1027,7 @@ private protocol AnyScopedStoreReducer {
   func scope<S, A, ChildState, ChildAction>(
     store: Store<S, A>,
     state toChildState: @escaping (S) -> ChildState,
-    id: ((S) -> AnyHashable)?,
+    id: ScopeID<S, A>?,
     action fromChildAction: @escaping (ChildAction) -> A,
     isInvalid: ((S) -> Bool)?,
     removeDuplicates isDuplicate: ((ChildState, ChildState) -> Bool)?
@@ -1027,20 +1038,20 @@ extension ScopedStoreReducer: AnyScopedStoreReducer {
   func scope<S, A, ChildState, ChildAction>(
     store: Store<S, A>,
     state toChildState: @escaping (S) -> ChildState,
-    id: ((S) -> AnyHashable)?,
+    id: ScopeID<S, A>?,
     action fromChildAction: @escaping (ChildAction) -> A,
     isInvalid: ((S) -> Bool)?,
     removeDuplicates isDuplicate: ((ChildState, ChildState) -> Bool)?
   ) -> Store<ChildState, ChildAction> {
-    let id = id?(store.stateSubject.value)
-    if let id = id,
+    if store.canCacheChildren,
+      let id = id,
       let childStore = store.children[id] as? Store<ChildState, ChildAction>
     {
       return childStore
     }
-    let fromAction = self.fromAction as! (A) -> RootAction?
+    let fromAction = self.fromAction as! (A) -> RootAction
     let isInvalid =
-      id == nil
+      id == nil || !store.canCacheChildren
       ? {
         store._isInvalidated() || isInvalid?(store.stateSubject.value) == true
       }
@@ -1048,13 +1059,10 @@ extension ScopedStoreReducer: AnyScopedStoreReducer {
         guard let store = store else { return true }
         return store._isInvalidated() || isInvalid?(store.stateSubject.value) == true
       }
-    let fromChildAction = {
-      BindingLocal.isActive && isInvalid() ? nil : fromChildAction($0)
-    }
     let reducer = ScopedStoreReducer<RootState, RootAction, ChildState, ChildAction>(
       rootStore: self.rootStore,
       state: { [stateSubject = store.stateSubject] _ in toChildState(stateSubject.value) },
-      action: { fromChildAction($0).flatMap(fromAction) },
+      action: { fromAction(fromChildAction($0)) },
       isInvalid: isInvalid,
       onInvalidate: { [weak store] in
         guard let id = id else { return }
@@ -1067,6 +1075,7 @@ extension ScopedStoreReducer: AnyScopedStoreReducer {
       reducer
     }
     childStore._isInvalidated = isInvalid
+    childStore.canCacheChildren = store.canCacheChildren && id != nil
     childStore.parentCancellable = store.stateSubject
       .dropFirst()
       .sink { [weak store, weak childStore] state in
@@ -1092,7 +1101,9 @@ extension ScopedStoreReducer: AnyScopedStoreReducer {
         Logger.shared.log("\(storeTypeName(of: store)).scope")
       }
     if let id = id {
-      store.children[id] = childStore
+      if store.canCacheChildren {
+        store.children[id] = childStore
+      }
     }
     return childStore
   }
