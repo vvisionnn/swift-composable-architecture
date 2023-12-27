@@ -39,7 +39,6 @@ open class NavigationStackViewController<
 	) -> AnyCancellable {
 		self.store = store
 		self.rootDestination = rootViewController
-		self.viewControllers = [rootViewController]
 		self.delegate = self
 		return store.publisher
 			.removeDuplicates(by: { areOrderedSetsDuplicates($0.ids, $1.ids) })
