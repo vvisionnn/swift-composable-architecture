@@ -32,11 +32,10 @@ public struct NavigationStackStore<State, Action, Root: View, Destination: View>
       destination(
         store
           .scope(
-            state: { $0[id: component.id]! },
             id: store.id(state: \.[id:component.id]!, action: \.[id:component.id]),
+            state: ToState(\.[id:component.id,default:SubscriptDefault(component.element)]),
             action: { .element(id: component.id, action: $0) },
-            isInvalid: { !$0.ids.contains(component.id) },
-            removeDuplicates: nil
+            isInvalid: { !$0.ids.contains(component.id) }
           )
       )
     }
@@ -68,11 +67,10 @@ public struct NavigationStackStore<State, Action, Root: View, Destination: View>
       SwitchStore(
         store
           .scope(
-            state: { $0[id: component.id]! },
             id: store.id(state: \.[id:component.id]!, action: \.[id:component.id]),
+            state: ToState(\.[id:component.id,default:SubscriptDefault(component.element)]),
             action: { .element(id: component.id, action: $0) },
-            isInvalid: { !$0.ids.contains(component.id) },
-            removeDuplicates: nil
+            isInvalid: { !$0.ids.contains(component.id) }
           )
       ) { _ in
         destination(component.element)
@@ -247,6 +245,13 @@ extension StackState {
       self = path.base
     }
     set { self = newValue.base }
+  }
+
+  fileprivate subscript(
+    id id: StackElementID, default default: SubscriptDefault<Element>
+  ) -> Element {
+    `default`.wrappedValue = self[id: id] ?? `default`.wrappedValue
+    return `default`.wrappedValue
   }
 
   fileprivate struct PathView: MutableCollection, RandomAccessCollection,

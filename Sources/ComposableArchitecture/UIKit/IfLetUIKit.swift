@@ -49,17 +49,17 @@ extension Store {
     then unwrap: @escaping (_ store: Store<Wrapped, Action>) -> Void,
     else: @escaping () -> Void = {}
   ) -> Cancellable where State == Wrapped? {
-    self.stateSubject
+    self.rootStore.didSet
+      .map { self.currentState }
       .removeDuplicates(by: { ($0 != nil) == ($1 != nil) })
       .sink { state in
-        if state != nil {
+        if let state = state {
           unwrap(
             self.scope(
-              state: { $0! },
               id: self.id(state: \.!, action: \.self),
+              state: ToState(\.[default:SubscriptDefault(state)]),
               action: { $0 },
-              isInvalid: { $0 == nil },
-              removeDuplicates: nil
+              isInvalid: { $0 == nil }
             )
           )
         } else {
