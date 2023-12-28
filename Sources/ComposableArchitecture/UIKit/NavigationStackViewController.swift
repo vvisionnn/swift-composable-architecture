@@ -108,6 +108,28 @@ open class NavigationStackViewController<
 		
 		self.store.send(.popFrom(id: id))
 	}
+	
+	open func navigationController(
+		_ navigationController: UINavigationController,
+		interactionControllerFor animationController: UIViewControllerAnimatedTransitioning
+	) -> UIViewControllerInteractiveTransitioning? {
+		nil
+	}
+	
+	open func navigationController(
+		_ navigationController: UINavigationController,
+		animationControllerFor operation: UINavigationController.Operation,
+		from fromVC: UIViewController,
+		to toVC: UIViewController
+	) -> UIViewControllerAnimatedTransitioning? {
+		nil
+	}
+	
+	open func navigationController(
+		_ navigationController: UINavigationController,
+		didShow viewController: UIViewController,
+		animated: Bool
+	) {}
 }
 
 fileprivate func returningLastNonNilValue<A, B>(_ f: @escaping (A) -> B?, defaultValue: B) -> (A) -> B {
