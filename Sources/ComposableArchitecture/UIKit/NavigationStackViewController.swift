@@ -5,7 +5,7 @@ import Combine
 open class NavigationStackViewController<
 	State,
 	Action
->: UINavigationController, UINavigationControllerDelegate, ViewControllerPresentable {
+>: UINavigationController, UINavigationControllerDelegate, ViewControllerPresentable, UIGestureRecognizerDelegate {
 	typealias Destinations = OrderedDictionary<StackElementID, UIViewController>
 	
 	private var store: Store<StackState<State>, StackAction<State, Action>>!
@@ -19,6 +19,11 @@ open class NavigationStackViewController<
 	
 	required public init?(coder aDecoder: NSCoder) {
 		fatalError("init(coder:) has not been implemented")
+	}
+	
+	open override func viewDidLoad() {
+		super.viewDidLoad()
+		self.interactivePopGestureRecognizer?.delegate = self
 	}
 	
 	open override func viewDidDisappear(_ animated: Bool) {
@@ -130,6 +135,12 @@ open class NavigationStackViewController<
 		didShow viewController: UIViewController,
 		animated: Bool
 	) {}
+	
+	open func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+		// NOTE: this is required or the pop gesture back will be disabled
+		// because the delegate method for `UIViewControllerInteractiveTransitioning` is set to nil
+		viewControllers.count > 1
+	}
 }
 
 fileprivate func returningLastNonNilValue<A, B>(_ f: @escaping (A) -> B?, defaultValue: B) -> (A) -> B {
