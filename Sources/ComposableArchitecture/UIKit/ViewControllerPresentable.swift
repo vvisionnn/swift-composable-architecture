@@ -64,7 +64,7 @@ extension ViewControllerPresentable {
 					case let (.some(prevState), .none):
 						guard self.presentedViewController != nil else { return }
 						let isAnimateDismiss = shouldAnimateDismiss?(prevState) ?? true
-						await self.dismissAsync(animated: isAnimateDismiss)
+						await self.presentedViewController?.dismissAsync(animated: isAnimateDismiss)
 						return
 					
 					case let (.none, .some(_state)):
@@ -92,9 +92,17 @@ extension ViewControllerPresentable {
 						_store.send(.dismiss)
 					}
 					if shouldDismiss {
-						await self.dismissAsync(animated: isAnimateDismiss)
+						await self.presentedViewController?.dismissAsync(animated: isAnimateDismiss)
 					}
-					await self.presentAsync(freshViewController, animated: isAnimatePresentation)
+					
+					// after await dismissing, the state may change, double check
+					guard store.currentState.wrappedValue != nil,
+								toID(store.currentState) == originalId
+					else { return }
+					await self.presentAsync(
+						freshViewController,
+						animated: isAnimatePresentation
+					)
 				}
 			}
 	}
