@@ -50,6 +50,15 @@ extension ReducerMacro: MemberAttributeMacro {
       default:
         break
       }
+      if let inheritanceClause = enumDecl.inheritanceClause,
+        inheritanceClause.inheritedTypes.contains(
+          where: {
+            ["CasePathable"].withCasePathsQualified.contains($0.type.trimmedDescription)
+          }
+        )
+      {
+        attributes.removeAll(where: { $0 == "CasePathable" })
+      }
       for attribute in enumDecl.attributes {
         guard
           case let .attribute(attribute) = attribute,
@@ -129,6 +138,10 @@ extension ReducerMacro: MemberAttributeMacro {
 }
 
 extension Array where Element == String {
+  var withCasePathsQualified: Self {
+    self.flatMap { [$0, "CasePaths.\($0)"] }
+  }
+
   var withQualified: Self {
     self.flatMap { [$0, "ComposableArchitecture.\($0)"] }
   }

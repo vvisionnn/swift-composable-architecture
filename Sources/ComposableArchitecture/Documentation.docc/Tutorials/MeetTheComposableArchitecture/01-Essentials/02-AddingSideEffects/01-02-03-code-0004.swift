@@ -8,7 +8,7 @@ struct CounterFeature {
     var isLoading = false
     var isTimerRunning = false
   }
-
+  
   enum Action {
     case decrementButtonTapped
     case factButtonTapped
@@ -17,7 +17,7 @@ struct CounterFeature {
     case timerTick
     case toggleTimerButtonTapped
   }
-
+  
   var body: some ReducerOf<Self> {
     Reduce { state, action in
       switch action {
