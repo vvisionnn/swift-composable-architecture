@@ -13,6 +13,7 @@ open class NavigationStackViewController<
 	private var destinations: Destinations = .init()
 
 	public var onDismiss: (() -> Void)? = nil
+	public var currentPresentedViewController: (any ViewControllerPresentable)?
 	
 	@MainActor
 	public init() { super.init(nibName: nil, bundle: nil) }

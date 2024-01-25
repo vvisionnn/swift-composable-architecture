@@ -3,6 +3,7 @@ import Combine
 
 public protocol ViewControllerPresentable: UIViewController {
 	var onDismiss: (@MainActor () -> Void)? { get set }
+	var currentPresentedViewController: (any ViewControllerPresentable)? { get set }
 }
 
 extension ViewControllerPresentable {
@@ -47,13 +48,14 @@ extension ViewControllerPresentable {
 		shouldAnimatePresentation: ((State) -> Bool)? = nil,
 		shouldAnimateDismiss: ((State) -> Bool)? = nil
 	) -> AnyCancellable {
-		ViewStore(store, observe: { $0 }, removeDuplicates: { toID($0) == toID($1) })
+		let queue = FIFOQueue()
+		return ViewStore(store, observe: { $0 }, removeDuplicates: { toID($0) == toID($1) })
 			.publisher
 			.withPrevious()
 			.receive(on: RunLoop.main)
 			.sink { [weak self] (prevState, presentationState) in
 				guard let self else { return }
-				Task { @MainActor in
+				queue.enqueue { @MainActor in
 					var shouldDismiss: Bool = false
 					var wrappedState: State? = nil
 					
@@ -62,20 +64,20 @@ extension ViewControllerPresentable {
 						return
 						
 					case let (.some(prevState), .none):
-						guard self.presentedViewController != nil else { return }
+						guard self.currentPresentedViewController != nil else { return }
 						let isAnimateDismiss = shouldAnimateDismiss?(prevState) ?? true
 						await self.dismissAsync(animated: isAnimateDismiss)
 						return
-					
+						
 					case let (.none, .some(_state)):
 						shouldDismiss = false
 						wrappedState = _state
-					
+						
 					case let (.some, .some(_state)):
 						shouldDismiss = true
 						wrappedState = _state
 					}
-
+					
 					guard let wrappedState else { return }
 					let originalId = toID(presentationState)
 					let freshViewController = store.scope(
@@ -86,7 +88,8 @@ extension ViewControllerPresentable {
 					).map({ toDestinationController(wrappedState, $0) }) ?? PresentationViewController(nibName: nil, bundle: nil)
 					let isAnimatePresentation = shouldAnimatePresentation?(wrappedState) ?? true
 					let isAnimateDismiss = shouldAnimateDismiss?(wrappedState) ?? true
-					freshViewController.onDismiss = { @MainActor [weak store] in
+					freshViewController.onDismiss = { @MainActor [weak store, weak freshViewController] in
+						_ = freshViewController
 						guard let _store = store, toID(_store.currentState) == originalId else { return }
 						guard _store.currentState.wrappedValue != nil else { return }
 						_store.send(.dismiss)
@@ -108,9 +111,10 @@ extension ViewControllerPresentable {
 	}
 }
 
-extension UIViewController {
+extension ViewControllerPresentable {
 	@MainActor
-	fileprivate func presentAsync(_ viewControllerToPresent: UIViewController, animated: Bool) async {
+	fileprivate func presentAsync(_ viewControllerToPresent: any ViewControllerPresentable, animated: Bool) async {
+		defer { self.currentPresentedViewController = viewControllerToPresent }
 		await withCheckedContinuation { continuation in
 			self.present(viewControllerToPresent, animated: animated) {
 				continuation.resume()
@@ -120,13 +124,21 @@ extension UIViewController {
 	
 	@MainActor
 	fileprivate func dismissAsync(animated: Bool) async {
-		await withCheckedContinuation { continuation in
-			self.dismiss(animated: animated) {
-				continuation.resume()
+		defer { self.currentPresentedViewController = nil }
+		if (self.presentedViewController == nil) != (self.currentPresentedViewController == nil) {
+			await withCheckedContinuation { continuation in
+				self.currentPresentedViewController?.dismiss(animated: animated) {
+					continuation.resume()
+				}
+			}
+		} else {
+			await withCheckedContinuation { continuation in
+				self.dismiss(animated: animated) {
+					continuation.resume()
+				}
 			}
 		}
 	}
-	
 }
 
 extension Store where State: Equatable {

@@ -9,6 +9,7 @@ import SwiftUI
 
 open class HostingPresentationViewController<Content: View>: UIHostingController<Content>, ViewControllerPresentable {
 	public var onDismiss: (() -> Void)?
+	public var currentPresentedViewController: (any ViewControllerPresentable)?
 	
 	open override func viewDidDisappear(_ animated: Bool) {
 		super.viewDidDisappear(animated)
