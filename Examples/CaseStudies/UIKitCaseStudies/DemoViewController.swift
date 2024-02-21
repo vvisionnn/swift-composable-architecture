@@ -437,14 +437,3 @@ final class PresentationStackViewController: NavigationStackViewController<
 //		).store(in: &subscriptions)
 	}
 }
-
-struct DemoViewController_Previews: PreviewProvider {
-	static var previews: some View {
-		let vc = PresentationStackViewController(
-			store: .init(initialState: .init()) {
-				PresentationStack()._printChanges()
-			}
-		)
-		return UIViewRepresented(makeUIView: { _ in vc.view })
-	}
-}
