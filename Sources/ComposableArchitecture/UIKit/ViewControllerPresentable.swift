@@ -80,12 +80,11 @@ extension ViewControllerPresentable {
 					
 					guard let wrappedState else { return }
 					let originalId = toID(presentationState)
+					let fallback = PresentationViewController(nibName: nil, bundle: nil)
 					let freshViewController = store.scope(
-						id: store.id(state: \.wrappedValue, action: \.presented),
-						state: ToState(returningLastNonNilValue { originalId == toID(store.currentState) ? $0.wrappedValue : nil }),
-						action: { .presented($0) },
-						isInvalid: nil
-					).map({ toDestinationController(wrappedState, $0) }) ?? PresentationViewController(nibName: nil, bundle: nil)
+						state: \.wrappedValue,
+						action: \.presented
+					).map({ toDestinationController(wrappedState, $0) }) ?? fallback
 					let isAnimatePresentation = shouldAnimatePresentation?(wrappedState) ?? true
 					let isAnimateDismiss = shouldAnimateDismiss?(wrappedState) ?? true
 					freshViewController.onDismiss = { @MainActor [weak store, weak freshViewController] in
@@ -146,8 +145,18 @@ extension Store where State: Equatable {
 	public func map<TargetState, Target>(
 		_ transform: @MainActor (Store<TargetState, Action>) -> Target
 	) -> Target? where State == Optional<TargetState> {
-		guard let state = ViewStore(self, observe: { $0 }).state else { return nil }
-		return transform(self.scope(state: { $0 ?? state }, action: { $0 }))
+		guard var state = ViewStore(self, observe: { $0 }).state else { return nil }
+		return transform(
+			self.scope(
+				id: self.id(state: \.!, action: \.self),
+				state: ToState {
+					state = $0 ?? state
+					return state
+				},
+				action: { $0 },
+				isInvalid: nil
+			)
+		)
 	}
 }
 
