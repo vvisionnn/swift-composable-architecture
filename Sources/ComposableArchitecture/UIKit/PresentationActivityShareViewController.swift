@@ -1,10 +1,3 @@
-//
-//  PresentationActivityShareViewController.swift
-//  
-//
-//  Created by Andy Wen on 2024/1/14.
-//
-
 import UIKit
 
 open class PresentationActivityShareViewController: UIActivityViewController, ViewControllerPresentable {

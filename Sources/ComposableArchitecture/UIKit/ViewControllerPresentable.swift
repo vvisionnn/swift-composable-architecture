@@ -49,10 +49,10 @@ extension ViewControllerPresentable {
 		shouldAnimateDismiss: ((State) -> Bool)? = nil
 	) -> AnyCancellable {
 		let queue = FIFOQueue()
-		return ViewStore(store, observe: { $0 }, removeDuplicates: { toID($0) == toID($1) })
-			.publisher
+		return store.publisher
+			.removeDuplicates(by: { toID($0) == toID($1) })
 			.withPrevious()
-			.receive(on: RunLoop.main)
+			.receive(on: DispatchQueue.main)
 			.sink { [weak self] (prevState, presentationState) in
 				guard let self else { return }
 				queue.enqueue { @MainActor in
@@ -145,7 +145,7 @@ extension Store where State: Equatable {
 	public func map<TargetState, Target>(
 		_ transform: @MainActor (Store<TargetState, Action>) -> Target
 	) -> Target? where State == Optional<TargetState> {
-		guard var state = ViewStore(self, observe: { $0 }).state else { return nil }
+		guard var state = self.currentState else { return nil }
 		return transform(
 			self.scope(
 				id: self.id(state: \.!, action: \.self),
