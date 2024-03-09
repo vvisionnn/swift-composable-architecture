@@ -536,6 +536,8 @@
             return .send(.delegate(.success(42)))
           case .delegate:
             return .none
+          case .view:
+            return .none
           }
         }
       }
@@ -558,6 +560,54 @@
       await store.send(.tap)
       await store.receive(\.delegate.success, 43)
     }
+
+    func testSendCaseKeyPath() async {
+      let store = TestStore<Int, Action>(initialState: 0) {
+        Reduce { state, action in
+          switch action {
+          case .tap:
+            return .send(.delegate(.success(42)))
+          case .delegate:
+            return .none
+          case .view(.tap):
+            state = state + 1
+            return .send(.delegate(.success(42 * 42)))
+          case let .view(.delete(indexSet)):
+            let sum = indexSet.reduce(0, +)
+            if sum == 42 {
+              state = state + 1
+            }
+            return .send(.delegate(.success(sum)))
+          }
+        }
+      }
+      await store.send(\.tap)
+      await store.receive(\.delegate.success, 42)
+
+      await store.send(\.view.tap) {
+        $0 = 1
+      }
+      await store.receive(\.delegate.success, 42 * 42)
+
+      await store.send(\.view.delete, [0])
+      await store.receive(\.delegate.success, 0)
+
+      await store.send(\.view.delete, [19, 23]) {
+        $0 = 2
+      }
+      await store.receive(\.delegate.success, 42)
+    }
+
+    func testBindingTestStore_WhenStateAndActionHaveSameName() async {
+      let store = TestStore(initialState: .init()) {
+        SameNameForStateAndAction()
+      }
+      await store.send(.onAppear)
+      await store.receive(\.isOn)
+      await store.receive(\.binding.isOn) {
+        $0.isOn = true
+      }
+    }
   }
 
   private struct Client: DependencyKey {
@@ -575,9 +625,39 @@
   private enum Action {
     case tap
     case delegate(Delegate)
+    case view(View)
     @CasePathable
     enum Delegate {
       case success(Int)
+    }
+    @CasePathable
+    enum View {
+      case tap
+      case delete(IndexSet)
+    }
+  }
+
+  @Reducer
+  struct SameNameForStateAndAction {
+    @ObservableState
+    struct State: Equatable { var isOn = false }
+    enum Action: BindableAction {
+      case binding(BindingAction<State>)
+      case onAppear
+      case isOn(Bool)
+    }
+    var body: some ReducerOf<Self> {
+      BindingReducer()
+      Reduce { state, action in
+        switch action {
+        case .binding:
+          return .none
+        case .onAppear:
+          return .send(.isOn(true))
+        case .isOn:
+          return .send(.set(\.isOn, true))
+        }
+      }
     }
   }
 #endif
