@@ -18,6 +18,8 @@ open class NavigationStackViewController<
 	@MainActor
 	public init() { super.init(nibName: nil, bundle: nil) }
 	
+	@MainActor
+	@available(*, unavailable)
 	required public init?(coder aDecoder: NSCoder) {
 		fatalError("init(coder:) has not been implemented")
 	}
@@ -37,12 +39,30 @@ open class NavigationStackViewController<
 		_ destinationStore: Store<State, Action>
 	) -> UIViewController
 	
+	public typealias CaseDestinationCreator = @MainActor (
+		_ destinationStore: Store<State, Action>
+	) -> UIViewController
+	
+	@MainActor
+	public func navigation(
+		_ store: Store<StackState<State>, StackAction<State, Action>>,
+		rootViewController: UIViewController,
+		destination: @escaping CaseDestinationCreator
+	) -> AnyCancellable where State: CaseReducerState, State.StateReducer.Action == Action {
+		self.navigation(
+			store,
+			rootViewController: rootViewController,
+			destination: { destination($1) }
+		)
+	}
+	
 	@MainActor
 	public func navigation(
 		_ store: Store<StackState<State>, StackAction<State, Action>>,
 		rootViewController: UIViewController,
 		destination: @escaping DestinationCreator
 	) -> AnyCancellable {
+		assert(self.store == nil)
 		self.store = store
 		self.rootDestination = rootViewController
 		self.delegate = self
@@ -58,7 +78,10 @@ open class NavigationStackViewController<
 						} else if let state = store.currentState[id: id] {
 							partialResult[id] = destination(state, store.scope(
 								id: store.id(state: \.[id:id]!, action: \.[id:id]),
-								state: ToState(returningLastNonNilValue({ _ in store.currentState[id: id] }, defaultValue: state)),
+								state: ToState(returningLastNonNilValue(
+									{ _ in store.currentState[id: id] },
+									defaultValue: state)
+								),
 								action: { .element(id: id, action: $0) },
 								isInvalid: { !$0.ids.contains(id) }
 							))
@@ -137,14 +160,19 @@ open class NavigationStackViewController<
 		animated: Bool
 	) {}
 	
-	open func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-		// NOTE: this is required or the pop gesture back will be disabled
-		// because the delegate method for `UIViewControllerInteractiveTransitioning` is set to nil
+	// NOTE: this is required or the pop gesture back will be disabled
+	// because the delegate method for `UIViewControllerInteractiveTransitioning` is set to nil
+	open func gestureRecognizerShouldBegin(
+		_ gestureRecognizer: UIGestureRecognizer
+	) -> Bool {
 		viewControllers.count > 1
 	}
 }
 
-fileprivate func returningLastNonNilValue<A, B>(_ f: @escaping (A) -> B?, defaultValue: B) -> (A) -> B {
+fileprivate func returningLastNonNilValue<A, B>(
+	_ f: @escaping (A) -> B?,
+	defaultValue: B
+) -> (A) -> B {
 	var lastWrapped: B = defaultValue
 	return { wrapped in
 		lastWrapped = f(wrapped) ?? lastWrapped

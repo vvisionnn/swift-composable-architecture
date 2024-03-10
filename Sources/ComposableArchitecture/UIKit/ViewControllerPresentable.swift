@@ -108,6 +108,46 @@ extension ViewControllerPresentable {
 				}
 			}
 	}
+	
+	@MainActor
+	public func presentation<State: Equatable, Action>(
+		_ store: Store<PresentationState<State>, PresentationAction<Action>>,
+		_ toDestinationController: @escaping (Store<State, Action>) -> any ViewControllerPresentable,
+		shouldAnimatePresentation: ((State) -> Bool)? = nil,
+		shouldAnimateDismiss: ((State) -> Bool)? = nil
+	) -> AnyCancellable where State: CaseReducerState, State.StateReducer.Action == Action {
+		self.presentation(
+			store,
+			id: { $0.id },
+			toDestinationController,
+			shouldAnimatePresentation: shouldAnimatePresentation,
+			shouldAnimateDismiss: shouldAnimateDismiss
+		)
+	}
+	
+	@MainActor
+	public func presentation<State: Equatable, Action>(
+		_ store: Store<PresentationState<State>, PresentationAction<Action>>,
+		_ toDestinationController: @escaping (Store<State, Action>) -> any ViewControllerPresentable
+	) -> AnyCancellable where State: CaseReducerState, State.StateReducer.Action == Action {
+		self.presentation(store, id: { $0.id }, toDestinationController)
+	}
+	
+	@MainActor
+	func presentation<State: Equatable, Action, ID: Hashable>(
+		_ store: Store<PresentationState<State>, PresentationAction<Action>>,
+		id toID: @escaping (PresentationState<State>) -> ID?,
+		_ toDestinationController: @escaping (Store<State, Action>) -> any ViewControllerPresentable,
+		shouldAnimatePresentation: ((State) -> Bool)? = nil,
+		shouldAnimateDismiss: ((State) -> Bool)? = nil
+	) -> AnyCancellable where State: CaseReducerState, State.StateReducer.Action == Action {
+		return self.presentation(
+			store, id: toID,
+			{ _, store in toDestinationController(store) },
+			shouldAnimatePresentation: shouldAnimatePresentation,
+			shouldAnimateDismiss: shouldAnimateDismiss
+		)
+	}
 }
 
 extension ViewControllerPresentable {

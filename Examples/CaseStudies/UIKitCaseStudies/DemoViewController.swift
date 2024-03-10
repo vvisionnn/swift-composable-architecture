@@ -10,45 +10,36 @@ import ComposableArchitecture
 import SwiftUI
 import UIKit
 
-struct PresentationCounter: Reducer {
-	struct Presentation: Reducer {
-		enum State: Equatable {
-			case sheetCounter(PresentationCounter.State)
-			case fullScreenCounter(PresentationCounter.State)
-		}
-		
-		enum Action: Equatable {
-			case sheetCounter(PresentationCounter.Action)
-			case fullScreenCounter(PresentationCounter.Action)
-		}
-		
-		var body: some ReducerOf<Self> {
-			Scope(state: /State.sheetCounter, action: /Action.sheetCounter) { PresentationCounter() }
-			Scope(state: /State.fullScreenCounter, action: /Action.fullScreenCounter) { PresentationCounter() }
-		}
+@Reducer
+struct PresentationCounter {
+	@Reducer(state: .equatable)
+	enum Presentation {
+		case sheetCounter(PresentationCounter)
+		case fullScreenCounter(PresentationCounter)
 	}
-	
+
+	@ObservableState
 	struct State: Equatable {
-		@PresentationState var presentation: Presentation.State?
+		@Presents var presentation: Presentation.State?
 		var count: Int = 0
 	}
 	
-	enum Action: Equatable {
-		enum ViewAction: Equatable {
-			case dismissButtonDidTapped
-			case incrementButtonDidTapped
-			case decrementButtonDidTapped
-			case presentAnotherDidTapped
-			case selfPresentButtonDidTapped
-			case pushButtonDidTapped
-			case popButtonDidTapped
-			case pushMultipleButtonDidTapped
-			case popMultipleButtonDidTapped
-			case popToRootButtonDidTapped
+	enum Action {
+		enum ViewAction {
+			case dismissButtonDidTap
+			case incrementButtonDidTap
+			case decrementButtonDidTap
+			case presentAnotherDidTap
+			case selfPresentButtonDidTap
+			case pushButtonDidTap
+			case popButtonDidTap
+			case pushMultipleButtonDidTap
+			case popMultipleButtonDidTap
+			case popToRootButtonDidTap
 		}
 		
-		enum InternalAction: Equatable {}
-		enum DelegateAction: Equatable {
+		enum InternalAction {}
+		enum DelegateAction {
 			case shouldPop
 			case shouldPopMultiple
 			case shouldPush
@@ -67,37 +58,37 @@ struct PresentationCounter: Reducer {
 	var body: some ReducerOf<Self> {
 		Reduce { state, action in
 			switch action {
-			case .view(.dismissButtonDidTapped):
+			case .view(.dismissButtonDidTap):
 				return .send(.delegate(.shouldDismiss))
 
-			case .view(.incrementButtonDidTapped):
+			case .view(.incrementButtonDidTap):
 				state.count += 1
 				return .none
 
-			case .view(.decrementButtonDidTapped):
+			case .view(.decrementButtonDidTap):
 				state.count -= 1
 				return .none
 
-			case .view(.presentAnotherDidTapped):
+			case .view(.presentAnotherDidTap):
 				return .send(.delegate(.shouldPresentAnother))
 
-			case .view(.selfPresentButtonDidTapped):
+			case .view(.selfPresentButtonDidTap):
 				state.presentation = .sheetCounter(.init(count: state.count + 1))
 				return .none
 
-			case .view(.pushButtonDidTapped):
+			case .view(.pushButtonDidTap):
 				return .send(.delegate(.shouldPush))
 
-			case .view(.popButtonDidTapped):
+			case .view(.popButtonDidTap):
 				return .send(.delegate(.shouldPop))
 
-			case .view(.pushMultipleButtonDidTapped):
+			case .view(.pushMultipleButtonDidTap):
 				return .send(.delegate(.shouldPushMultiple))
 
-			case .view(.popMultipleButtonDidTapped):
+			case .view(.popMultipleButtonDidTap):
 				return .send(.delegate(.shouldPopMultiple))
 
-			case .view(.popToRootButtonDidTapped):
+			case .view(.popToRootButtonDidTap):
 				return .send(.delegate(.shouldPopToRoot))
 				
 			case .view:
@@ -133,7 +124,7 @@ struct PresentationCounter: Reducer {
 				return .none
 			}
 		}
-		.ifLet(\.$presentation, action: /Action.presentation) { Presentation() }
+		.ifLet(\.$presentation, action: \.presentation)
 	}
 }
 
@@ -145,10 +136,6 @@ final class PresentationCounterViewController: HostingPresentationViewController
 		self.store = store
 		super.init(rootView: CounterView(store: store))
 		self.title = "\(ViewStore(store, observe: { $0 }).count)"
-	}
-	
-	@MainActor required dynamic init?(coder aDecoder: NSCoder) {
-		fatalError("init(coder:) has not been implemented")
 	}
 	
 	override func viewDidLoad() {
@@ -168,36 +155,36 @@ final class PresentationCounterViewController: HostingPresentationViewController
 		
 		self.presentation(store.scope(
 			state: \.$presentation,
-			action: PresentationCounter.Action.presentation
-		)) { state, childStore in
-			switch state {
-			case .sheetCounter:
-				guard let viewController = childStore.scope(
-					state: /PresentationCounter.Presentation.State.sheetCounter,
-					action: PresentationCounter.Presentation.Action.sheetCounter
-				).map(PresentationCounterViewController.init(store:)) else {
-					return PresentationViewController(nibName: nil, bundle: nil)
-				}
-				let _viewController = NavigationPresentationViewController(
-					rootViewController: viewController
-				)
-				_viewController.modalPresentationStyle = .pageSheet
-				return _viewController
-			case .fullScreenCounter:
-				guard let viewController = childStore.scope(
-					state: /PresentationCounter.Presentation.State.fullScreenCounter,
-					action: PresentationCounter.Presentation.Action.fullScreenCounter
-				).map(PresentationCounterViewController.init(store:)) else {
-					return PresentationViewController(nibName: nil, bundle: nil)
-				}
-				let _viewController = NavigationPresentationViewController(
-					rootViewController: viewController
-				)
-				_viewController.modalPresentationStyle = .overFullScreen
-				return _viewController
+			action: \.presentation
+		)) { store in
+			switch store.case {
+			case let .sheetCounter(childStore):
+				PresentationCounterViewController(store: childStore)
+					.wrapInNavigationController()
+					.modalPresentationStyle(.pageSheet)
+			case let .fullScreenCounter(childStore):
+				PresentationCounterViewController(store: childStore)
+					.wrapInNavigationController()
+					.modalPresentationStyle(.overFullScreen)
 			}
 		}
 		.store(in: &subscriptions)
+	}
+}
+
+extension UIViewController {
+	@inlinable
+	@discardableResult
+	func modalPresentationStyle(_ style: UIModalPresentationStyle) -> Self {
+		modalPresentationStyle = style
+		return self
+	}
+}
+
+extension PresentationCounterViewController {
+	@inlinable
+	func wrapInNavigationController() -> NavigationPresentationViewController {
+		return .init(rootViewController: self)
 	}
 }
 
@@ -214,106 +201,81 @@ struct CounterView: View {
 	var body: some View {
 		VStack {
 			HStack {
-				Button(action: { viewStore.send(.view(.incrementButtonDidTapped)) }) {
-					Text("+")
-				}
-				
+				Button("+")  { viewStore.send(.view(.incrementButtonDidTap)) }
 				Text("\(viewStore.count)")
-				
-				
-				Button(action: { viewStore.send(.view(.decrementButtonDidTapped)) }) {
-					Text("-")
-				}
+				Button("-") { viewStore.send(.view(.decrementButtonDidTap)) }
 			}
 			
-			Button(action: { viewStore.send(.view(.pushButtonDidTapped)) }) { Text("Push") }
-			Button(action: { viewStore.send(.view(.popButtonDidTapped)) }) { Text("Pop") }
-			Button(action: { viewStore.send(.view(.pushMultipleButtonDidTapped)) }) { Text("Push Multiple") }
-			Button(action: { viewStore.send(.view(.popMultipleButtonDidTapped)) }) { Text("Pop Multiple") }
-			Button(action: { viewStore.send(.view(.popToRootButtonDidTapped)) }) { Text("Pop to Root") }
-
-			Button(action: { viewStore.send(.view(.presentAnotherDidTapped)) }) { Text("Present Another") }
-			Button(action: { viewStore.send(.view(.selfPresentButtonDidTapped)) }) { Text("Present By Self") }
-			Button(action: { self.dismiss() }) { Text("native dismiss") }
-			Button(action: { viewStore.send(.view(.dismissButtonDidTapped)) }) { Text("action dismiss") }
+			Button("Push") { viewStore.send(.view(.pushButtonDidTap)) }
+			Button("Pop") { viewStore.send(.view(.popButtonDidTap)) }
+			Button("Push Multiple") { viewStore.send(.view(.pushMultipleButtonDidTap)) }
+			Button("Pop Multiple") { viewStore.send(.view(.popMultipleButtonDidTap)) }
+			Button("Pop to Root") { viewStore.send(.view(.popToRootButtonDidTap)) }
+			Button("Present Another") { viewStore.send(.view(.presentAnotherDidTap)) }
+			Button("Present By Self") { viewStore.send(.view(.selfPresentButtonDidTap)) }
+			Button("action dismiss") { viewStore.send(.view(.dismissButtonDidTap)) }
+			Button("native dismiss") { self.dismiss() }
 		}
 		.buttonStyle(.borderedProminent)
 	}
 }
 
-struct PresentationStack: Reducer {
-	public struct StackDestination: Reducer {
-		public enum State: Equatable {
-			case counter(PresentationCounter.State)
-		}
-		
-		public enum Action: Equatable {
-			case counter(PresentationCounter.Action)
-		}
-		
-		public var body: some ReducerOf<Self> {
-			Scope(state: /State.counter, action: /Action.counter) { PresentationCounter() }
-		}
+@Reducer
+struct PresentationStack {
+	@Reducer(state: .equatable)
+	enum StackDestination {
+		case counter(PresentationCounter)
 	}
 	
-	struct Presentation: Reducer {
-		enum State: Equatable {
-			case sheetCounter(PresentationCounter.State)
-			case fullScreenCounter(PresentationCounter.State)
-		}
-		
-		enum Action: Equatable {
-			case sheetCounter(PresentationCounter.Action)
-			case fullScreenCounter(PresentationCounter.Action)
-		}
-		
-		var body: some ReducerOf<Self> {
-			Scope(state: /State.sheetCounter, action: /Action.sheetCounter) { PresentationCounter() }
-			Scope(state: /State.fullScreenCounter, action: /Action.fullScreenCounter) { PresentationCounter() }
-		}
+	@Reducer(state: .equatable)
+	enum Presentation {
+		case sheetCounter(PresentationCounter)
+		case fullScreenCounter(PresentationCounter)
 	}
 	
-	struct State: Equatable {
-		@PresentationState var presentation: Presentation.State?
-		var stackPath: StackState<StackDestination.State> = .init()
+	@ObservableState
+	struct State {
+		@Presents var presentation: Presentation.State?
+		var path: StackState<StackDestination.State> = .init()
 		var rootPath: PresentationCounter.State = .init()
 	}
 	
-	enum Action: Equatable {
+	enum Action {
 		case presentation(PresentationAction<Presentation.Action>)
-		case stackPath(StackAction<StackDestination.State, StackDestination.Action>)
+		case path(StackAction<StackDestination.State, StackDestination.Action>)
 		case rootPath(PresentationCounter.Action)
 	}
 	
 	var body: some ReducerOf<Self> {
-		Scope(state: \.rootPath, action: /Action.rootPath) { PresentationCounter() }
+		Scope(state: \.rootPath, action: \.rootPath) { PresentationCounter() }
 		
 		Reduce({ state, action in
 			switch action {
 			case .rootPath(.delegate(.shouldPush)),
-					.stackPath(.element(id: _, action: .counter(.delegate(.shouldPush)))):
-				state.stackPath.append(.counter(.init()))
+					.path(.element(id: _, action: .counter(.delegate(.shouldPush)))):
+				state.path.append(.counter(.init()))
 				return .none
 				
 			case .rootPath(.delegate(.shouldPop)),
-					.stackPath(.element(id: _, action: .counter(.delegate(.shouldPop)))):
-				state.stackPath.removeLast()
+					.path(.element(id: _, action: .counter(.delegate(.shouldPop)))):
+				guard !state.path.isEmpty else { return .none }
+				state.path.removeLast()
 				return .none
 				
 			case .rootPath(.delegate(.shouldPushMultiple)),
-					.stackPath(.element(id: _, action: .counter(.delegate(.shouldPushMultiple)))):
+					.path(.element(id: _, action: .counter(.delegate(.shouldPushMultiple)))):
 				let newPaths = Array(repeating: StackDestination.State.counter(.init()), count: Int.random(in: 1...10))
-				state.stackPath.append(contentsOf: newPaths)
+				state.path.append(contentsOf: newPaths)
 				return .none
 				
 			case .rootPath(.delegate(.shouldPopMultiple)),
-					.stackPath(.element(id: _, action: .counter(.delegate(.shouldPopMultiple)))):
-				state.stackPath.removeLast(min(state.stackPath.count, Int.random(in: 1...10)))
+					.path(.element(id: _, action: .counter(.delegate(.shouldPopMultiple)))):
+				state.path.removeLast(min(state.path.count, Int.random(in: 1...10)))
 				return .none
 				
 			case .rootPath(.delegate(.shouldPopToRoot)),
-					.stackPath(.element(id: _, action: .counter(.delegate(.shouldPopToRoot)))):
-				state.stackPath.removeAll()
+					.path(.element(id: _, action: .counter(.delegate(.shouldPopToRoot)))):
+				state.path.removeAll()
 				return .none
 				
 			case .presentation(.presented(.sheetCounter(.delegate(.shouldDismiss)))),
@@ -336,7 +298,7 @@ struct PresentationStack: Reducer {
 				}
 				return .none
 				
-			case .stackPath:
+			case .path:
 				return .none
 				
 			case .presentation:
@@ -346,8 +308,8 @@ struct PresentationStack: Reducer {
 				return .none
 			}
 		})
-		.forEach(\.stackPath, action: /Action.stackPath) { StackDestination() }
-		.ifLet(\.$presentation, action: /Action.presentation) { Presentation() }
+		.ifLet(\.$presentation, action: \.presentation)
+		.forEach(\.path, action: \.path)
 	}
 }
 
@@ -371,33 +333,30 @@ final class PresentationStackViewController: NavigationStackViewController<
 		super.viewDidLoad()
 		
 		self.navigation(
-			store.scope(state: \.stackPath, action: PresentationStack.Action.stackPath),
+			store.scope(state: \.path, action: \.path),
 			rootViewController: PresentationCounterViewController(
 				store: store.scope(
 					state: \.rootPath,
-					action: PresentationStack.Action.rootPath
+					action: \.rootPath
 				)
 			)
-		) { @MainActor initialState, childStore in
-			switch initialState {
-			case .counter:
-				return childStore.scope(
-					state: /PresentationStack.StackDestination.State.counter,
-					action: PresentationStack.StackDestination.Action.counter
-				).map(PresentationCounterViewController.init(store:)) ?? UIViewController(nibName: nil, bundle: nil)
+		) { @MainActor store in
+			switch store.case {
+			case let .counter(_store):
+				return PresentationCounterViewController(store: _store)
 			}
 		}
 		.store(in: &subscriptions)
 		
 		self.presentation(store.scope(
 			state: \.$presentation,
-			action: PresentationStack.Action.presentation
+			action: \.presentation
 		)) { state, childStore in
 			switch state {
 			case .sheetCounter:
 				guard let viewController = childStore.scope(
-					state: /PresentationStack.Presentation.State.sheetCounter,
-					action: PresentationStack.Presentation.Action.sheetCounter
+					state: \.sheetCounter,
+					action: \.sheetCounter
 				).map(PresentationCounterViewController.init(store:)) else {
 					return PresentationViewController(nibName: nil, bundle: nil)
 				}
@@ -408,8 +367,8 @@ final class PresentationStackViewController: NavigationStackViewController<
 				return _viewController
 			case .fullScreenCounter:
 				guard let viewController = childStore.scope(
-					state: /PresentationStack.Presentation.State.fullScreenCounter,
-					action: PresentationStack.Presentation.Action.fullScreenCounter
+					state: \.fullScreenCounter,
+					action: \.fullScreenCounter
 				).map(PresentationCounterViewController.init(store:)) else {
 					return PresentationViewController(nibName: nil, bundle: nil)
 				}
@@ -421,19 +380,5 @@ final class PresentationStackViewController: NavigationStackViewController<
 			}
 		}
 		.store(in: &subscriptions)
-		
-//		self.presentSheet(
-//			store.scope(state: \.$presentation, action: PresentationStack.Action.presentation),
-//			state: /PresentationStack.Presentation.State.sheetCounter,
-//			action: PresentationStack.Presentation.Action.sheetCounter,
-//			PresentationCounterViewController.init(store:)
-//		).store(in: &subscriptions)
-//		
-//		self.presentSheet(
-//			store.scope(state: \.$presentation, action: PresentationStack.Action.presentation),
-//			state: /PresentationStack.Presentation.State.fullScreenCounter,
-//			action: PresentationStack.Presentation.Action.fullScreenCounter,
-//			PresentationCounterViewController.init(store:)
-//		).store(in: &subscriptions)
 	}
 }
