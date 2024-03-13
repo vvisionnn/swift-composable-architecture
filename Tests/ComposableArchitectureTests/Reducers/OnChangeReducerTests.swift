@@ -1,9 +1,9 @@
 import ComposableArchitecture
 import XCTest
 
-@MainActor
 @available(*, deprecated, message: "TODO: Update to use case pathable syntax with Swift 5.9")
 final class OnChangeReducerTests: BaseTCATestCase {
+  @MainActor
   func testOnChange() async {
     struct Feature: Reducer {
       struct State: Equatable {
@@ -48,6 +48,7 @@ final class OnChangeReducerTests: BaseTCATestCase {
     }
   }
 
+  @MainActor
   func testOnChangeChildStates() async {
     struct Feature: Reducer {
       struct ChildFeature: Reducer {
@@ -139,6 +140,7 @@ final class OnChangeReducerTests: BaseTCATestCase {
     }
   }
 
+  @MainActor
   func testOnChangeTuple() async {
     struct Feature: Reducer {
       struct State: Equatable {
@@ -190,5 +192,46 @@ final class OnChangeReducerTests: BaseTCATestCase {
     }
 
     await store.send(.noop)
+  }
+
+  @MainActor
+  func testSharedState() async {
+    struct Count: Codable, Equatable {
+      var value = 0
+    }
+
+    struct Feature: Reducer {
+      struct State: Equatable {
+        @Shared(.fileStorage(URL(fileURLWithPath: "/file.json"))) var count = Count()
+        var description = ""
+      }
+      enum Action: Equatable {
+        case incrementButtonTapped
+      }
+      var body: some ReducerOf<Self> {
+        Reduce { state, action in
+          switch action {
+          case .incrementButtonTapped:
+            state.count.value += 1
+            return .none
+          }
+        }
+        .onChange(of: \.count) { oldValue, newValue in
+          Reduce { state, _ in
+            state.description = "old: \(oldValue.value), new: \(newValue.value)"
+            return .none
+          }
+        }
+      }
+    }
+    let store = TestStore(initialState: Feature.State()) { Feature() }
+    await store.send(.incrementButtonTapped) {
+      $0.count.value = 1
+      $0.description = "old: 0, new: 1"
+    }
+    await store.send(.incrementButtonTapped) {
+      $0.count.value = 2
+      $0.description = "old: 1, new: 2"
+    }
   }
 }

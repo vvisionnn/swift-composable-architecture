@@ -3,14 +3,12 @@ import XCTest
 
 @testable import SyncUps
 
-@MainActor
 final class SyncUpsListTests: XCTestCase {
+  @MainActor
   func testAdd() async throws {
     let store = TestStore(initialState: SyncUpsList.State()) {
       SyncUpsList()
     } withDependencies: {
-      $0.continuousClock = ImmediateClock()
-      $0.dataManager = .mock()
       $0.uuid = .incrementing
     }
 
@@ -35,6 +33,7 @@ final class SyncUpsListTests: XCTestCase {
     }
   }
 
+  @MainActor
   func testAdd_ValidatedAttendees() async throws {
     @Dependency(\.uuid) var uuid
 
@@ -56,8 +55,6 @@ final class SyncUpsListTests: XCTestCase {
     ) {
       SyncUpsList()
     } withDependencies: {
-      $0.continuousClock = ImmediateClock()
-      $0.dataManager = .mock()
       $0.uuid = .incrementing
     }
 
@@ -73,41 +70,5 @@ final class SyncUpsListTests: XCTestCase {
         )
       ]
     }
-  }
-
-  func testLoadingDataDecodingFailed() async throws {
-    let store = TestStore(initialState: SyncUpsList.State()) {
-      SyncUpsList()
-    } withDependencies: {
-      $0.continuousClock = ImmediateClock()
-      $0.dataManager = .mock(
-        initialData: Data("!@#$ BAD DATA %^&*()".utf8)
-      )
-    }
-
-    XCTAssertEqual(store.state.destination, .alert(.dataFailedToLoad))
-
-    await store.send(\.destination.alert.confirmLoadMockData) {
-      $0.destination = nil
-      $0.syncUps = [
-        .mock,
-        .designMock,
-        .engineeringMock,
-      ]
-    }
-  }
-
-  func testLoadingDataFileNotFound() async throws {
-    let store = TestStore(initialState: SyncUpsList.State()) {
-      SyncUpsList()
-    } withDependencies: {
-      $0.continuousClock = ImmediateClock()
-      $0.dataManager.load = { @Sendable _ in
-        struct FileNotFound: Error {}
-        throw FileNotFound()
-      }
-    }
-
-    XCTAssertEqual(store.state.destination, nil)
   }
 }
