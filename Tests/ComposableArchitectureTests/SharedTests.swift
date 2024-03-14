@@ -2,8 +2,8 @@ import Combine
 import ComposableArchitecture
 import XCTest
 
-@MainActor
 final class SharedTests: XCTestCase {
+  @MainActor
   func testSharing() async {
     let store = TestStore(
       initialState: SharedFeature.State(
@@ -24,6 +24,7 @@ final class SharedTests: XCTestCase {
     XCTAssertEqual(store.state.profile.stats.count, 1)
   }
 
+  @MainActor
   func testSharing_Failure() async {
     let store = TestStore(
       initialState: SharedFeature.State(
@@ -55,6 +56,7 @@ final class SharedTests: XCTestCase {
     XCTAssertEqual(store.state.sharedCount, 1)
   }
 
+  @MainActor
   func testSharing_NonExhaustive() async {
     let store = TestStore(
       initialState: SharedFeature.State(
@@ -69,8 +71,29 @@ final class SharedTests: XCTestCase {
 
     await store.send(.sharedIncrement)
     XCTAssertEqual(store.state.sharedCount, 1)
+
+    XCTExpectFailure {
+      $0.compactDescription == """
+        A state change does not match expectation: …
+
+              SharedFeature.State(
+                _count: 0,
+                _profile: #1 Profile(…),
+            −   _sharedCount: #1 3,
+            +   _sharedCount: #1 2,
+                _stats: #1 Stats(count: 0)
+              )
+
+        (Expected: −, Actual: +)
+        """
+    }
+    await store.send(.sharedIncrement) {
+      $0.sharedCount = 3
+    }
+    XCTAssertEqual(store.state.sharedCount, 2)
   }
 
+  @MainActor
   func testMultiSharing() async {
     @Shared(Stats()) var stats
 
@@ -90,6 +113,7 @@ final class SharedTests: XCTestCase {
     XCTAssertEqual(stats.count, 2)
   }
 
+  @MainActor
   func testIncrementalMutation() async {
     let store = TestStore(
       initialState: SharedFeature.State(
@@ -135,6 +159,7 @@ final class SharedTests: XCTestCase {
     }
   }
 
+  @MainActor
   func testEffect() async {
     let store = TestStore(
       initialState: SharedFeature.State(
@@ -151,6 +176,7 @@ final class SharedTests: XCTestCase {
     }
   }
 
+  @MainActor
   func testEffect_Failure() async {
     let store = TestStore(
       initialState: SharedFeature.State(
@@ -180,6 +206,7 @@ final class SharedTests: XCTestCase {
     await store.receive(\.sharedIncrement)
   }
 
+  @MainActor
   func testMutationOfSharedStateInLongLivingEffect() async {
     let store = TestStore(
       initialState: SharedFeature.State(
@@ -198,6 +225,7 @@ final class SharedTests: XCTestCase {
     }
   }
 
+  @MainActor
   func testMutationOfSharedStateInLongLivingEffect_NoAssertion() async {
     let sharedCountInitLine = #line + 4
     let store = TestStore(
@@ -229,6 +257,7 @@ final class SharedTests: XCTestCase {
     await store.send(.longLivingEffect)
   }
 
+  @MainActor
   func testMutationOfSharedStateInLongLivingEffect_IncorrectAssertion() async {
     let store = TestStore(
       initialState: SharedFeature.State(
@@ -257,6 +286,7 @@ final class SharedTests: XCTestCase {
     }
   }
 
+  @MainActor
   func testComplexSharedEffect_ReducerMutation() async {
     struct Feature: Reducer {
       struct State: Equatable {
@@ -303,6 +333,7 @@ final class SharedTests: XCTestCase {
     await mainQueue.advance(by: .seconds(1))
   }
 
+  @MainActor
   func testComplexSharedEffect_EffectMutation() async {
     struct Feature: Reducer {
       struct State: Equatable {
@@ -360,6 +391,7 @@ final class SharedTests: XCTestCase {
     }
   }
 
+  @MainActor
   func testDump() {
     @Shared(Profile(stats: Shared(Stats()))) var profile: Profile
     XCTAssertEqual(
@@ -380,6 +412,7 @@ final class SharedTests: XCTestCase {
     )
   }
 
+  @MainActor
   func testSimpleFeatureFailure() async {
     let store = TestStore(initialState: SimpleFeature.State(count: Shared(0))) {
       SimpleFeature()
@@ -415,6 +448,7 @@ final class SharedTests: XCTestCase {
   }
 
   @available(*, deprecated)
+  @MainActor
   func testObservation_Object() {
     @Shared var object: SharedObject
     _object = Shared(SharedObject())
@@ -428,6 +462,7 @@ final class SharedTests: XCTestCase {
     self.wait(for: [countDidChange], timeout: 0)
   }
 
+  @MainActor
   func testAssertSharedStateWithNoChanges() {
     let store = TestStore(initialState: SimpleFeature.State(count: Shared(0))) {
       SimpleFeature()
@@ -442,6 +477,7 @@ final class SharedTests: XCTestCase {
     }
   }
 
+  @MainActor
   func testPublisher() {
     var cancellables: Set<AnyCancellable> = []
     defer { _ = cancellables }
@@ -460,6 +496,7 @@ final class SharedTests: XCTestCase {
     XCTAssertEqual(counts, [1, 2])
   }
 
+  @MainActor
   func testPublisher_MultipleSubscribers() {
     var cancellables: Set<AnyCancellable> = []
     defer { _ = cancellables }
@@ -483,6 +520,7 @@ final class SharedTests: XCTestCase {
     XCTAssertEqual(counts, [1, 1, 2, 2])
   }
 
+  @MainActor
   func testPublisher_MutateInSink() {
     var cancellables: Set<AnyCancellable> = []
     defer { _ = cancellables }
@@ -502,6 +540,7 @@ final class SharedTests: XCTestCase {
     XCTAssertEqual(counts, [1, 2])
   }
 
+  @MainActor
   func testPublisher_Persistence_MutateInSink() {
     var cancellables: Set<AnyCancellable> = []
     defer { _ = cancellables }
@@ -523,6 +562,7 @@ final class SharedTests: XCTestCase {
     XCTAssertEqual(userDefaults.integer(forKey: "count"), 2)
   }
 
+  @MainActor
   func testPublisher_Persistence_ExternalChange() async throws {
     @Dependency(\.defaultAppStorage) var defaults
     @Shared(.appStorage("count")) var count = 0
@@ -546,6 +586,7 @@ final class SharedTests: XCTestCase {
     XCTAssertEqual(defaults.integer(forKey: "count"), 2)
   }
 
+  @MainActor
   func testMultiplePublisherSubscriptions() async {
     let runCount = 1_000
     for _ in 1...runCount {
@@ -576,6 +617,7 @@ final class SharedTests: XCTestCase {
     }
   }
 
+  @MainActor
   func testEarlySharedStateMutation() async {
     let store = TestStore(initialState: EarlySharedStateMutation.State(count: Shared(0))) {
       EarlySharedStateMutation()
@@ -596,6 +638,29 @@ final class SharedTests: XCTestCase {
     await store.receive(.response) {
       $0.count = 42
     }
+  }
+
+  func test_Codable_AppStorage() throws {
+    struct State: Codable {
+      @Shared(.appStorage("count")) var count = 0
+      init(count: Int = 0) {
+        self.count = count
+      }
+      init(from decoder: any Decoder) throws {
+        self._count = Shared(wrappedValue: 0, .appStorage("count"))
+      }
+    }
+
+    let state = State()
+    state.count = 42
+
+    let data = try JSONEncoder().encode(state)
+
+    state.count += 1
+
+    let decodedState = try JSONDecoder().decode(State.self, from: data)
+
+    XCTAssertEqual(decodedState.count, 43)
   }
 }
 

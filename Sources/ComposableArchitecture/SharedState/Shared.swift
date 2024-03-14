@@ -198,7 +198,7 @@ import Foundation
 
   extension Shared: Equatable where Value: Equatable {
     public static func == (lhs: Shared, rhs: Shared) -> Bool {
-      if SharedLocals.exhaustivity == .on, lhs.reference === rhs.reference {
+      if SharedLocals.isProcessingChanges, lhs.reference === rhs.reference {
         if let lhsReference = lhs.reference as? any Equatable {
           func open<T: Equatable>(_ lhsReference: T) -> Bool {
             lhsReference == rhs.reference as? T
@@ -221,16 +221,6 @@ import Foundation
   extension Shared: Identifiable where Value: Identifiable {
     public var id: Value.ID {
       self.wrappedValue.id
-    }
-  }
-
-  extension Shared: Decodable where Value: Decodable {
-    public init(from decoder: Decoder) throws {
-      do {
-        self.init(try decoder.singleValueContainer().decode(Value.self))
-      } catch {
-        self.init(try .init(from: decoder))
-      }
     }
   }
 
@@ -295,8 +285,7 @@ import Foundation
 #endif
 
 enum SharedLocals {
-  @TaskLocal static var exhaustivity: Exhaustivity?
-  static var isProcessingChanges: Bool { Self.exhaustivity != nil }
+  @TaskLocal static var isProcessingChanges = false
 }
 
 final class SharedChangeTracker {
@@ -321,10 +310,13 @@ final class SharedChangeTracker {
       self.changes[ObjectIdentifier(shared.reference)] = shared.reference
     }
   #endif
-  func clearChanges() {
+  func resetChanges() {
     for change in self.changes.values {
       change.clearSnapshot()
     }
+  }
+  func clearChanges() {
+    self.resetChanges()
     self.changes.removeAll()
   }
   func assertUnchanged() {
