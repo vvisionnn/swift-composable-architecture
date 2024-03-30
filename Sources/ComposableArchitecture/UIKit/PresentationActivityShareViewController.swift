@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import UIKit
 
 open class PresentationActivityShareViewController: UIActivityViewController, ViewControllerPresentable {
@@ -9,3 +10,4 @@ open class PresentationActivityShareViewController: UIActivityViewController, Vi
 		checkDismissedIfNeeded()
 	}
 }
+#endif

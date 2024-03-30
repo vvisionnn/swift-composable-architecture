@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import UIKit
 
 open class PresentationDocumentPickerViewController: UIDocumentPickerViewController, ViewControllerPresentable {
@@ -9,3 +10,4 @@ open class PresentationDocumentPickerViewController: UIDocumentPickerViewControl
 		checkDismissedIfNeeded()
 	}
 }
+#endif
