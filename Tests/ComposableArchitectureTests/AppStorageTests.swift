@@ -75,7 +75,7 @@ final class AppStorageTests: XCTestCase {
     XCTAssertEqual(defaultAppStorage.integer(forKey: "count"), 0)
   }
 
-  func testObservation() {
+  func testObservation_DirectMutation() {
     @Shared(.appStorage("count")) var count = 0
     let countDidChange = self.expectation(description: "countDidChange")
     withPerceptionTracking {
@@ -87,10 +87,34 @@ final class AppStorageTests: XCTestCase {
     self.wait(for: [countDidChange], timeout: 0)
   }
 
+  func testObservation_ExternalMutation() {
+    @Dependency(\.defaultAppStorage) var defaults
+    @Shared(.appStorage("count")) var count = 0
+    let didChange = self.expectation(description: "didChange")
+
+    withPerceptionTracking {
+      _ = count
+    } onChange: { [count = $count] in
+      XCTAssertEqual(count.wrappedValue, 0)
+      didChange.fulfill()
+    }
+
+    defaults.setValue(42, forKey: "count")
+    self.wait(for: [didChange], timeout: 0)
+    XCTAssertEqual(count, 42)
+  }
+
   func testChangeUserDefaultsDirectly() {
     @Dependency(\.defaultAppStorage) var defaults
     @Shared(.appStorage("count")) var count = 0
     defaults.setValue(count + 42, forKey: "count")
+    XCTAssertEqual(count, 42)
+  }
+
+  func testChangeUserDefaultsDirectly_KeyWithPeriod() {
+    @Dependency(\.defaultAppStorage) var defaults
+    @Shared(.appStorage("pointfreeco.count")) var count = 0
+    defaults.setValue(count + 42, forKey: "pointfreeco.count")
     XCTAssertEqual(count, 42)
   }
 
@@ -102,7 +126,7 @@ final class AppStorageTests: XCTestCase {
     XCTAssertEqual(count, 0)
   }
 
-  func testKeyPath() async throws {
+  func testKeyPath() {
     @Dependency(\.defaultAppStorage) var defaults
     @Shared(.appStorage(\.count)) var count = 0
     defaults.count += 1

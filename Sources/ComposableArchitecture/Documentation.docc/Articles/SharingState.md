@@ -26,11 +26,13 @@ strategy if you want to use something other than user defaults or the file syste
   * [User defaults](#User-defaults)
   * [File storage](#File-storage)
   * [Custom persistence](#Custom-persistence)
+* [Observing changes to shared state](#Observing-changes-to-shared-state)
 * [Initialization rules](#Initialization-rules)
 * [Deriving shared state](#Deriving-shared-state)
 * [Testing](#Testing)
 * [Type-safe keys](#Type-safe-keys)
 * [Shared state in pre-observation apps](#Shared-state-in-pre-observation-apps)
+* [Gotchas of @Shared](#Gotchas-of-Shared)
 
 ## "Source of truth"
 
@@ -200,7 +202,7 @@ And then define a static function on the ``PersistenceKey`` protocol for creatin
 persistence strategy:
 
 ```swift
-extension PersistenceKey {
+extension PersistenceReaderKey {
   public static func custom<Value>(/*...*/) -> Self
   where Self == CustomPersistence<Value> {
     CustomPersistence(/* ... */)
@@ -214,6 +216,44 @@ With those steps done you can make use of the strategy in the same way one does 
 ```swift
 @Shared(.custom(/* ... */)) var myValue: Value
 ```
+
+## Observing changes to shared state
+
+The ``Shared`` property wrapper exposes a ``Shared/publisher`` property so that you can observe
+changes to the reference from any part of your application. For example, if some feature in your
+app wants to listen for changes to some shared `count` value, then it can introduce an `onAppear`
+action that kicks off a long-living effect that subscribes to changes of `count`:
+
+```swift
+case .onAppear:
+  return .publisher {
+    state.$count.publisher
+      .map(Action.countUpdated)
+  }
+
+case .countUpdated(let count):
+  print("Count updated to \(count)")
+  return .none
+```
+
+Note that you will have to be careful for features that both hold onto shared state and subscribe
+to changes to that state. It is possible to introduce an infinite loop if you do something like 
+this:
+
+```swift
+case .onAppear:
+  return .publisher {
+    state.$count.publisher
+      .map(Action.countUpdated)
+  }
+
+case .countUpdated(let count):
+  state.count = count + 1
+  return .none
+```
+
+If `count` changes, then `$count.publisher` emits, causing the `countUpdated` action to be sent, 
+causing the shared `count` to be mutated, causing `$count.publisher` to emit, and so on. 
 
 ## Initialization rules
 
@@ -623,7 +663,7 @@ To add some type-safety and reusability to this process you can extend the ``Fil
 to add a static variable for describing the details of your persistence:
 
 ```swift
-extension PersistenceKey where Self == FileStorageKey<IdentifiedArrayOf<User>> {
+extension PersistenceReaderKey where Self == FileStorageKey<IdentifiedArrayOf<User>> {
   static let users: Self {
     fileStorage(URL(/* ... */))
   }
@@ -654,7 +694,7 @@ This technique works for all types of persistence strategies. For example, a typ
 key can be constructed like so:
 
 ```swift
-extension PersistenceKey where Self == InMemoryKey<IdentifiedArrayOf<User>> {
+extension PersistenceReaderKey where Self == InMemoryKey<IdentifiedArrayOf<User>> {
   static var users: Self {
     inMemory("users")
   }
@@ -664,7 +704,7 @@ extension PersistenceKey where Self == InMemoryKey<IdentifiedArrayOf<User>> {
 And a type-safe `.appStorage` key can be constructed like so:
 
 ```swift
-extension PersistenceKey where Self == AppStorageKey<Int> {
+extension PersistenceReaderKey where Self == AppStorageKey<Int> {
   static var count: Self {
     appStorage("count")
   }
@@ -711,6 +751,64 @@ struct FeatureView: View {
     WithPerceptionTracking {
       Form {
         Text(store.sharedCount.description)
+      }
+    }
+  }
+}
+```
+
+## Gotchas of @Shared
+
+There are a few gotchas to be aware of when using shared state in the Composable Architecture.
+
+#### Previews
+
+When a preview is run in an app target, the entry point is also executed. This means if your entry
+point looks something like this:
+
+```swift
+@main
+struct MainApp: App {
+  let store = Store(…)
+
+  var body: some Scene {
+    WindowGroup {
+      AppView(store: store)
+    }
+  }
+}
+```
+
+…then a store will be created each time you run your preview. This can be problematic with `@Shared`
+and persistence strategies because the first access of a `@Shared` property will use the default
+value provided, and that will make later `@Shared` access use the same default. That will mean
+you cannot override shared state in previews.
+
+The fix is to delay creation of the store until the entry point's `body` is executed, _and_ to 
+further not execute the `body` when running for previews. Further, it can be a good idea to also
+not run the `body` when in tests because that can also interfere with tests (as documented in
+<doc:Testing#Testing-gotchas>). Here is one way this can be accomplished:
+
+```swift
+import ComposableArchitecture
+import SwiftUI
+
+@main
+struct MainApp: App {
+  @MainActor
+  static let store = Store(…)
+
+  var body: some Scene {
+    WindowGroup {
+      if 
+        _XCTIsTesting || 
+        ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1" 
+      {
+        // NB: Don't run application in tests/previews to avoid interference 
+        //     between the app and the test/preview.
+        EmptyView()
+      } else {
+        AppView(store: Self.store)
       }
     }
   }
