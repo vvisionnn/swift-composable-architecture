@@ -5,3 +5,7 @@
 /*.swiftinterface
 /*.xcodeproj
 xcuserdata/
+
+### Tuist derived files ###
+graph.dot
+Derived/
