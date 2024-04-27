@@ -1,5 +1,5 @@
 import Combine
-import ComposableArchitecture
+@_spi(Internals) import ComposableArchitecture
 import XCTest
 
 final class SharedTests: XCTestCase {
@@ -44,7 +44,8 @@ final class SharedTests: XCTestCase {
                 _profile: #1 Profile(…),
             −   _sharedCount: #1 2,
             +   _sharedCount: #1 1,
-                _stats: #1 Stats(count: 0)
+                _stats: #1 Stats(count: 0),
+                _isOn: #1 false
               )
 
         (Expected: −, Actual: +)
@@ -81,7 +82,8 @@ final class SharedTests: XCTestCase {
                 _profile: #1 Profile(…),
             −   _sharedCount: #1 3,
             +   _sharedCount: #1 2,
-                _stats: #1 Stats(count: 0)
+                _stats: #1 Stats(count: 0),
+                _isOn: #1 false
               )
 
         (Expected: −, Actual: +)
@@ -149,7 +151,8 @@ final class SharedTests: XCTestCase {
                 _profile: #1 Profile(…),
             −   _sharedCount: #1 2,
             +   _sharedCount: #1 1,
-                _stats: #1 Stats(count: 0)
+                _stats: #1 Stats(count: 0),
+                _isOn: #1 false
               )
 
         (Expected: −, Actual: +)
@@ -197,7 +200,8 @@ final class SharedTests: XCTestCase {
                 _profile: #1 Profile(…),
             −   _sharedCount: #1 0,
             +   _sharedCount: #1 1,
-                _stats: #1 Stats(count: 0)
+                _stats: #1 Stats(count: 0),
+                _isOn: #1 false
               )
 
         (Expected: −, Actual: +)
@@ -220,15 +224,14 @@ final class SharedTests: XCTestCase {
     } withDependencies: {
       $0.mainQueue = .immediate
     }
-    await store.send(.longLivingEffect)
-    store.state.$sharedCount.assert {
-      $0 = 1
+    await store.send(.longLivingEffect).finish()
+    store.assert {
+      $0.sharedCount = 1
     }
   }
 
   @MainActor
   func testMutationOfSharedStateInLongLivingEffect_NoAssertion() async {
-    let sharedCountInitLine = #line + 4
     let store = TestStore(
       initialState: SharedFeature.State(
         profile: Shared(Profile(stats: Shared(Stats()))),
@@ -242,17 +245,20 @@ final class SharedTests: XCTestCase {
     }
     XCTExpectFailure {
       $0.compactDescription == """
-        Tracked changes to \
-        'Shared<Int>@ComposableArchitectureTests/SharedTests.swift:\(sharedCountInitLine)' \
-        but failed to assert: …
+        Test store completed before asserting against changes to shared state: …
 
-          − 0
-          + 1
+              SharedFeature.State(
+                _count: 0,
+                _profile: #1 Profile(…),
+            −   _sharedCount: #1 0,
+            +   _sharedCount: #1 1,
+                _stats: #1 Stats(count: 0),
+                _isOn: #1 false
+              )
 
-        (Before: −, After: +)
+        (Expected: −, Actual: +)
 
-        Call 'Shared<Int>.assert' to exhaustively test these changes, or call 'skipChanges' to \
-        ignore them.
+        Invoke "TestStore.assert" at the end of this test to assert against changes to shared state.
         """
     }
     await store.send(.longLivingEffect)
@@ -273,17 +279,23 @@ final class SharedTests: XCTestCase {
     }
     XCTExpectFailure {
       $0.compactDescription == """
-        XCTAssertNoDifference failed: …
+        A state change does not match expectation: …
 
-          − 1
-          + 2
+              SharedFeature.State(
+                _count: 0,
+                _profile: #1 Profile(…),
+            −   _sharedCount: #1 2,
+            +   _sharedCount: #1 1,
+                _stats: #1 Stats(count: 0),
+                _isOn: #1 false
+              )
 
-        (First: −, Second: +)
+        (Expected: −, Actual: +)
         """
     }
     await store.send(.longLivingEffect)
-    store.state.$sharedCount.assert {
-      $0 = 2
+    store.assert {
+      $0.sharedCount = 2
     }
   }
 
@@ -387,8 +399,8 @@ final class SharedTests: XCTestCase {
     }
     await store.send(.stopTimer)
     await mainQueue.advance(by: .seconds(1))
-    store.state.$count.assert {
-      $0 = 42
+    store.assert {
+      $0.count = 42
     }
   }
 
@@ -448,6 +460,19 @@ final class SharedTests: XCTestCase {
     self.wait(for: [countDidChange], timeout: 0)
   }
 
+  func testObservation_projected() {
+    @Shared var count: Int
+    _count = Shared(0)
+    let countDidChange = self.expectation(description: "countDidChange")
+    withPerceptionTracking {
+      _ = $count
+    } onChange: {
+      countDidChange.fulfill()
+    }
+    $count = Shared(1)
+    self.wait(for: [countDidChange], timeout: 0)
+  }
+
   @available(*, deprecated)
   @MainActor
   func testObservation_Object() {
@@ -487,6 +512,7 @@ final class SharedTests: XCTestCase {
     var counts = [Int]()
     sharedCount.publisher.sink { _ in
     } receiveValue: { count in
+      XCTAssertEqual(sharedCount.wrappedValue, count - 1)
       counts.append(count)
     }
     .store(in: &cancellables)
@@ -560,7 +586,9 @@ final class SharedTests: XCTestCase {
     count += 1
     XCTAssertEqual(counts, [1, 2])
     @Dependency(\.defaultAppStorage) var userDefaults
-    XCTAssertEqual(userDefaults.integer(forKey: "count"), 2)
+    // TODO: Should we runtime warn on re-entrant mutations?
+    XCTAssertEqual(count, 1)
+    XCTAssertEqual(userDefaults.integer(forKey: "count"), 1)
   }
 
   @MainActor
@@ -663,6 +691,176 @@ final class SharedTests: XCTestCase {
 
     XCTAssertEqual(decodedState.count, 43)
   }
+
+  @MainActor
+  func testObserveWithPrintChanges() async {
+    let store = TestStore(initialState: SimpleFeature.State(count: Shared(0))) {
+      SimpleFeature()._printChanges()
+    }
+
+    var observations: [Int] = []
+    observe {
+      observations.append(store.state.count)
+    }
+
+    XCTAssertEqual(observations, [0])
+    await store.send(.incrementInReducer) {
+      dump($0.$count)
+      $0.count += 1
+    }
+    XCTAssertEqual(observations, [0, 1])
+  }
+
+  func testSharedDefaults_UseDefault() {
+    @Shared(.isOn) var isOn
+    XCTAssertEqual(isOn, false)
+  }
+
+  func testSharedDefaults_OverrideDefault() {
+    @Shared(.isOn) var isOn = true
+    XCTAssertEqual(isOn, true)
+  }
+
+  func testSharedDefaults_MultipleWithDifferentDefaults() async throws {
+    @Shared(.isOn) var isOn1
+    @Shared(.isOn) var isOn2 = true
+    @Shared(.appStorage("isOn")) var isOn3 = true
+
+    XCTAssertEqual(isOn1, false)
+    XCTAssertEqual(isOn2, false)
+    XCTAssertEqual(isOn3, false)
+
+    isOn2 = true
+    XCTAssertEqual(isOn1, true)
+    XCTAssertEqual(isOn2, true)
+    XCTAssertEqual(isOn3, true)
+
+    isOn1 = false
+    XCTAssertEqual(isOn1, false)
+    XCTAssertEqual(isOn2, false)
+    XCTAssertEqual(isOn3, false)
+
+    isOn3 = true
+    XCTAssertEqual(isOn1, true)
+    XCTAssertEqual(isOn2, true)
+    XCTAssertEqual(isOn3, true)
+  }
+
+  func testSharedReaderDefaults_MultipleWithDifferentDefaults() async throws {
+    @Shared(.appStorage("isOn")) var isOn = false
+    @SharedReader(.isOn) var isOn1
+    @SharedReader(.isOn) var isOn2 = true
+    @SharedReader(.appStorage("isOn")) var isOn3 = true
+
+    XCTAssertEqual(isOn1, false)
+    XCTAssertEqual(isOn2, false)
+    XCTAssertEqual(isOn3, false)
+
+    isOn = true
+    XCTAssertEqual(isOn1, true)
+    XCTAssertEqual(isOn2, true)
+    XCTAssertEqual(isOn3, true)
+  }
+
+  @MainActor
+  func testPrivateSharedState() async {
+    let isOn = Shared(false)
+    let store = TestStore(
+      initialState: SharedFeature.State(
+        profile: Shared(Profile(stats: Shared(Stats()))),
+        sharedCount: Shared(0),
+        stats: Shared(Stats()),
+        isOn: isOn
+      )
+    ) {
+      SharedFeature()
+    }
+
+    await store.send(.toggleIsOn) {
+      _ = $0
+      isOn.wrappedValue = true
+    }
+    await store.send(.toggleIsOn) {
+      _ = $0
+      isOn.wrappedValue = false
+    }
+  }
+
+  func testEquatability_DifferentReference() {
+    let count = Shared(0)
+    @Shared(.appStorage("count")) var appStorageCount = 0
+    @Shared(.fileStorage(.temporaryDirectory.appending(path: "count.json"))) var fileStorageCount = 0
+    @Shared(.inMemory("count")) var inMemoryCount = 0
+
+    XCTAssertEqual(count, $appStorageCount)
+    XCTAssertEqual($appStorageCount, $fileStorageCount)
+    XCTAssertEqual($fileStorageCount, $inMemoryCount)
+    XCTAssertEqual($inMemoryCount, count)
+  }
+
+  func testEquatable_DifferentKeyPath() {
+    struct Settings {
+      var isOn = false
+      var hasSeen = false
+    }
+    @Shared(.inMemory("settings")) var settings = Settings()
+    XCTAssertEqual($settings.isOn, $settings.hasSeen)
+    XCTAssertEqual($settings.isOn.hashValue, $settings.hasSeen.hashValue)
+  }
+
+  func testSelfEqualityInAnAssertion() {
+    let count = Shared(0)
+    withSharedChangeTracking { tracker in
+      count.wrappedValue += 1
+      tracker.assert {
+        XCTAssertNotEqual(count, count)
+        XCTAssertEqual(count.wrappedValue, count.wrappedValue)
+      }
+      XCTAssertEqual(count, count)
+      XCTAssertEqual(count.wrappedValue, count.wrappedValue)
+    }
+    XCTAssertEqual(count, count)
+    XCTAssertEqual(count.wrappedValue, count.wrappedValue)
+  }
+
+  func testBasicAssertion() {
+    let count = Shared(0)
+    withSharedChangeTracking { tracker in
+      count.wrappedValue += 1
+      tracker.assert {
+        count.wrappedValue += 1
+        XCTAssertEqual(count, count)
+        XCTAssertEqual(count.wrappedValue, count.wrappedValue)
+      }
+      XCTAssertEqual(count, count)
+      XCTAssertEqual(count.wrappedValue, count.wrappedValue)
+    }
+    XCTAssertEqual(count, count)
+    XCTAssertEqual(count.wrappedValue, count.wrappedValue)
+  }
+
+  func testHashableSoundness() {
+    XCTTODO("""
+      Currently the Hashable conformance of Shared is not sound when evaluated inside change
+      tracker and assertion blocks.
+      """)
+
+    for _ in 1...100 {
+      let count = Shared(0)
+      let countHash = count.hashValue
+      XCTAssertEqual(count.hashValue, countHash)
+      withSharedChangeTracking { tracker in
+        count.wrappedValue += 1
+        XCTAssertEqual(count.hashValue, countHash)
+        tracker.assert {
+          count.wrappedValue += 1
+          XCTAssertEqual(count.hashValue, countHash)
+        }
+        XCTAssertEqual(count.hashValue, countHash)
+      }
+      XCTAssertEqual(count.hashValue, countHash)
+    }
+  }
 }
 
 @Reducer
@@ -673,14 +871,29 @@ private struct SharedFeature {
     @Shared var profile: Profile
     @Shared var sharedCount: Int
     @Shared var stats: Stats
+    @Shared fileprivate var isOn: Bool
+    init(
+      count: Int = 0,
+      profile: Shared<Profile>,
+      sharedCount: Shared<Int>,
+      stats: Shared<Stats>,
+      isOn: Shared<Bool> = Shared(false)
+    ) {
+      self.count = count
+      self._profile = profile
+      self._sharedCount = sharedCount
+      self._stats = stats
+      self._isOn = isOn
+    }
   }
   enum Action {
     case increment
     case incrementStats
     case longLivingEffect
     case noop
-    case sharedIncrement
     case request
+    case sharedIncrement
+    case toggleIsOn
   }
   @Dependency(\.mainQueue) var mainQueue
   var body: some ReducerOf<Self> {
@@ -700,13 +913,16 @@ private struct SharedFeature {
         }
       case .noop:
         return .none
-      case .sharedIncrement:
-        state.sharedCount += 1
-        return .none
       case .request:
         return .run { send in
           await send(.sharedIncrement)
         }
+      case .sharedIncrement:
+        state.sharedCount += 1
+        return .none
+      case .toggleIsOn:
+        state.isOn.toggle()
+        return .none
       }
     }
   }
@@ -842,5 +1058,21 @@ private struct EarlySharedStateMutation {
         return .none
       }
     }
+  }
+}
+
+extension PersistenceReaderKey where Self == PersistenceKeyDefault<AppStorageKey<Bool>> {
+  static var isOn: Self {
+    PersistenceKeyDefault(.appStorage("isOn"), false)
+  }
+}
+
+// NB: This is a compile-time test to verify that optional shared state with defaults compiles.
+struct StateWithOptionalSharedAndDefault {
+  @Shared(.optionalValueWithDefault) var optionalValueWithDefault
+}
+extension PersistenceKey where Self == PersistenceKeyDefault<AppStorageKey<Bool?>> {
+  fileprivate static var optionalValueWithDefault: Self {
+    return PersistenceKeyDefault(.appStorage("optionalValueWithDefault"), nil)
   }
 }

@@ -2,6 +2,10 @@
 import Combine
 #endif
 
+/// A property wrapper type that shares a value with multiple parts of an application.
+///
+/// See the <doc:SharingState> article for more detailed information on how to use this property
+/// wrapper.
 @dynamicMemberLookup
 @propertyWrapper
 public struct SharedReader<Value> {
@@ -21,15 +25,13 @@ public struct SharedReader<Value> {
     self = projectedValue
   }
 
-  public init(_ value: Value, fileID: StaticString = #fileID, line: UInt = #line) {
-    self.init(
-      reference: ValueReference<Value, InMemoryKey<Value>>(
-        initialValue: value,
-        fileID: fileID,
-        line: line
-      ),
-      keyPath: \Value.self
-    )
+  public init?(_ base: SharedReader<Value?>) {
+    guard let shared = base[dynamicMember: \.self] else { return nil }
+    self = shared
+  }
+
+  public init(_ base: Shared<Value>) {
+    self = base.reader
   }
 
   public var wrappedValue: Value {
@@ -42,7 +44,15 @@ public struct SharedReader<Value> {
   }
 
   public var projectedValue: Self {
-    get { self }
+    get {
+      reference.access()
+      return self
+    }
+    set {
+      reference.withMutation {
+        self = newValue
+      }
+    }
   }
 
   public subscript<Member>(
@@ -65,6 +75,7 @@ public struct SharedReader<Value> {
   }
 
 #if canImport(Combine)
+  // TODO: Should this be wrapped in a type we own instead of `AnyPublisher`?
   public var publisher: AnyPublisher<Value, Never> {
     func open<R: Reference>(_ reference: R) -> AnyPublisher<Value, Never> {
       return reference.publisher

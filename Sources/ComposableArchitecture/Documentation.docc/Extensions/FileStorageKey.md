@@ -4,4 +4,8 @@
 
 ### Storing a value
 
-- ``PersistenceKey/fileStorage(_:)``
+- ``PersistenceReaderKey/fileStorage(_:)``
+
+### Overriding storage
+
+- ``FileStorage``

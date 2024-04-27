@@ -7,17 +7,15 @@ final class AppFeatureTests: XCTestCase {
   @MainActor
   func testDetailEdit() async throws {
     var syncUp = SyncUp.mock
-
-    let store = TestStore(
-      initialState: AppFeature.State(syncUpsList: SyncUpsList.State(syncUps: [syncUp]))
-    ) {
+    @Shared(.syncUps) var syncUps = [syncUp]
+    let store = TestStore(initialState: AppFeature.State()) {
       AppFeature()
     }
 
-    await store.send(
-      \.path.push, (id: 0, .detail(SyncUpDetail.State(syncUp: store.state.syncUpsList.$syncUps[0])))
-    ) {
-      $0.path[id: 0] = .detail(SyncUpDetail.State(syncUp: Shared(syncUp)))
+    let sharedSyncUp = try XCTUnwrap($syncUps[id: syncUp.id])
+
+    await store.send(\.path.push, (id: 0, .detail(SyncUpDetail.State(syncUp: sharedSyncUp)))) {
+      $0.path[id: 0] = .detail(SyncUpDetail.State(syncUp: sharedSyncUp))
     }
 
     await store.send(\.path[id:0].detail.editButtonTapped) {
@@ -41,18 +39,15 @@ final class AppFeatureTests: XCTestCase {
   @MainActor
   func testDelete() async throws {
     let syncUp = SyncUp.mock
-
-    let store = TestStore(
-      initialState: AppFeature.State(syncUpsList: SyncUpsList.State(syncUps: [syncUp]))
-    ) {
+    @Shared(.syncUps) var syncUps = [syncUp]
+    let store = TestStore(initialState: AppFeature.State()) {
       AppFeature()
     }
 
-    guard let sharedSyncUp = store.state.syncUpsList.$syncUps[id: syncUp.id]
-    else { return }
+    let sharedSyncUp = try XCTUnwrap($syncUps[id: syncUp.id])
 
     await store.send(\.path.push, (id: 0, .detail(SyncUpDetail.State(syncUp: sharedSyncUp)))) {
-      $0.path[id: 0] = .detail(SyncUpDetail.State(syncUp: Shared(syncUp)))
+      $0.path[id: 0] = .detail(SyncUpDetail.State(syncUp: sharedSyncUp))
     }
 
     await store.send(\.path[id:0].detail.deleteButtonTapped) {
@@ -112,6 +107,15 @@ final class AppFeatureTests: XCTestCase {
     await store.send(\.path[id:1].record.onTask)
     await store.receive(\.path.popFrom) {
       XCTAssertEqual($0.path.count, 1)
+    }
+    store.assert {
+      $0.path[id: 0]?.detail?.syncUp.meetings = [
+        Meeting(
+          id: Meeting.ID(UUID(0)),
+          date: Date(timeIntervalSince1970: 1_234_567_890),
+          transcript: "I completed the project"
+        )
+      ]
     }
   }
 }

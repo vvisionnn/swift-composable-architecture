@@ -17,7 +17,7 @@ extension Shared {
   ) {
     self.init(
       reference: {
-        @Dependency(PersistentReferencesKey.self) var references
+        @Dependency(\.persistentReferences) var references
         return references.withValue {
           if let reference = $0[persistenceKey] {
             return reference
@@ -37,6 +37,7 @@ extension Shared {
     )
   }
 
+  @_disfavoredOverload
   public init<Wrapped>(
     _ persistenceKey: some PersistenceKey<Value>,
     fileID: StaticString = #fileID,
@@ -44,7 +45,8 @@ extension Shared {
   ) where Value == Wrapped? {
     self.init(wrappedValue: nil, persistenceKey, fileID: fileID, line: line)
   }
-
+  
+  @_disfavoredOverload
   public init(
     _ persistenceKey: some PersistenceKey<Value>,
     fileID: StaticString = #fileID,
@@ -55,6 +57,33 @@ extension Shared {
       throw LoadError()
     }
     self.init(wrappedValue: initialValue, persistenceKey, fileID: fileID, line: line)
+  }
+
+  public init<Key: PersistenceKey>(
+    _ persistenceKey: PersistenceKeyDefault<Key>,
+    fileID: StaticString = #fileID,
+    line: UInt = #line
+  ) where Key.Value == Value {
+    self.init(
+      wrappedValue: persistenceKey.load(initialValue: nil) ?? persistenceKey.defaultValue,
+      persistenceKey.base,
+      fileID: fileID,
+      line: line
+    )
+  }
+
+  public init<Key: PersistenceKey>(
+    wrappedValue: Value,
+    _ persistenceKey: PersistenceKeyDefault<Key>,
+    fileID: StaticString = #fileID,
+    line: UInt = #line
+  ) where Key.Value == Value {
+    self.init(
+      wrappedValue: wrappedValue,
+      persistenceKey.base,
+      fileID: fileID,
+      line: line
+    )
   }
 }
 
@@ -67,7 +96,7 @@ extension SharedReader {
   ) {
     self.init(
       reference: {
-        @Dependency(PersistentReferencesKey.self) var references
+        @Dependency(\.persistentReferences) var references
         return references.withValue {
           if let reference = $0[persistenceKey] {
             return reference
@@ -87,6 +116,7 @@ extension SharedReader {
     )
   }
 
+  @_disfavoredOverload
   public init<Wrapped>(
     _ persistenceKey: some PersistenceReaderKey<Value>,
     fileID: StaticString = #fileID,
@@ -95,6 +125,7 @@ extension SharedReader {
     self.init(wrappedValue: nil, persistenceKey, fileID: fileID, line: line)
   }
 
+  @_disfavoredOverload
   public init(
     _ persistenceKey: some PersistenceReaderKey<Value>,
     fileID: StaticString = #fileID,
@@ -105,6 +136,33 @@ extension SharedReader {
       throw LoadError()
     }
     self.init(wrappedValue: initialValue, persistenceKey, fileID: fileID, line: line)
+  }
+  
+  public init<Key: PersistenceReaderKey>(
+    _ persistenceKey: PersistenceKeyDefault<Key>,
+    fileID: StaticString = #fileID,
+    line: UInt = #line
+  ) where Key.Value == Value {
+    self.init(
+      wrappedValue: persistenceKey.load(initialValue: nil) ?? persistenceKey.defaultValue,
+      persistenceKey.base,
+      fileID: fileID,
+      line: line
+    )
+  }
+
+  public init<Key: PersistenceReaderKey>(
+    wrappedValue: Value,
+    _ persistenceKey: PersistenceKeyDefault<Key>,
+    fileID: StaticString = #fileID,
+    line: UInt = #line
+  ) where Key.Value == Value {
+    self.init(
+      wrappedValue: wrappedValue,
+      persistenceKey.base,
+      fileID: fileID,
+      line: line
+    )
   }
 }
 
@@ -120,8 +178,8 @@ final class ValueReference<Value, Persistence: PersistenceReaderKey<Value>>: Ref
   #endif
   private var subscription: Shared<Value>.Subscription?
   private var _value: Value {
-    didSet {
-      self.subject.send(self._value)
+    willSet {
+      self.subject.send(newValue)
     }
   }
   #if canImport(Perception)
@@ -187,6 +245,18 @@ final class ValueReference<Value, Persistence: PersistenceReaderKey<Value>>: Ref
       }
     }
   }
+  func access() {
+    #if canImport(Perception)
+      _$perceptionRegistrar.access(self, keyPath: \.value)
+    #endif
+  }
+  func withMutation<T>(_ mutation: () throws -> T) rethrows -> T {
+    #if canImport(Perception)
+      self._$perceptionRegistrar.willSet(self, keyPath: \.value)
+      defer { self._$perceptionRegistrar.didSet(self, keyPath: \.value) }
+    #endif
+    return try mutation()
+  }
   var description: String {
     "Shared<\(Value.self)>@\(self.fileID):\(self.line)"
   }
@@ -199,11 +269,18 @@ final class ValueReference<Value, Persistence: PersistenceReaderKey<Value>>: Ref
   extension ValueReference: Perceptible {}
 #endif
 
-enum PersistentReferencesKey: DependencyKey {
+private enum PersistentReferencesKey: DependencyKey {
   static var liveValue: LockIsolated<[AnyHashable: any Reference]> {
     LockIsolated([:])
   }
   static var testValue: LockIsolated<[AnyHashable: any Reference]> {
     LockIsolated([:])
+  }
+}
+
+extension DependencyValues {
+  var persistentReferences: LockIsolated<[AnyHashable: any Reference]> {
+    get { self[PersistentReferencesKey.self] }
+    set { self[PersistentReferencesKey.self] = newValue }
   }
 }

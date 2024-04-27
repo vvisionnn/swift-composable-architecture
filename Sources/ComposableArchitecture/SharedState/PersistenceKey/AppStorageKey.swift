@@ -153,7 +153,7 @@ extension PersistenceReaderKey {
 
 /// A type defining a user defaults persistence strategy.
 ///
-/// See ``PersistenceKey/appStorage(_:)-9zd2f`` to create values of this type.
+/// See ``PersistenceReaderKey/appStorage(_:)-4l5b`` to create values of this type.
 public struct AppStorageKey<Value> {
   private let lookup: any Lookup<Value>
   private let key: String
@@ -298,18 +298,25 @@ extension AppStorageKey: PersistenceKey {
     ) { _ in
       guard !SharedAppStorageLocals.isSetting
       else { return }
-      didSet(self.store.value(forKey: self.key) as? Value ?? initialValue)
+      didSet(load(initialValue: initialValue))
     }
-    let willEnterForeground = NotificationCenter.default.addObserver(
-      forName: willEnterForegroundNotificationName,
-      object: nil,
-      queue: nil
-    ) { _ in
-      didSet(self.store.value(forKey: self.key) as? Value ?? initialValue)
+    let willEnterForeground: (any NSObjectProtocol)?
+    if let willEnterForegroundNotificationName {
+      willEnterForeground = NotificationCenter.default.addObserver(
+        forName: willEnterForegroundNotificationName,
+        object: nil,
+        queue: nil
+      ) { _ in
+        didSet(load(initialValue: initialValue))
+      }
+    } else {
+      willEnterForeground = nil
     }
     return Shared.Subscription {
       NotificationCenter.default.removeObserver(userDefaultsDidChange)
-      NotificationCenter.default.removeObserver(willEnterForeground)
+      if let willEnterForeground {
+        NotificationCenter.default.removeObserver(willEnterForeground)
+      }
     }
   }
 }

@@ -488,8 +488,9 @@ public final class TestStore<State, Action> {
   public var timeout: UInt64
 
   private let file: StaticString
-  private var line: UInt
+  private let line: UInt
   let reducer: TestReducer<State, Action>
+  private let sharedChangeTracker: SharedChangeTracker
   private let store: Store<State, TestReducer<State, Action>.TestAction>
 
   /// Creates a test store with an initial state and a reducer powering its runtime.
@@ -515,14 +516,12 @@ public final class TestStore<State, Action> {
     file: StaticString = #file,
     line: UInt = #line
   )
-  where
-    R.State == State,
-    R.Action == Action,
-    State: Equatable
-  {
+  where State: Equatable, R.State == State, R.Action == Action {
+    let sharedChangeTracker = SharedChangeTracker()
     let reducer = XCTFailContext.$current.withValue(XCTFailContext(file: file, line: line)) {
       Dependencies.withDependencies {
         prepareDependencies(&$0)
+        $0.sharedChangeTrackers.insert(sharedChangeTracker)
       } operation: {
         TestReducer(Reduce(reducer()), initialState: initialState())
       }
@@ -532,6 +531,7 @@ public final class TestStore<State, Action> {
     self.reducer = reducer
     self.store = Store(initialState: reducer.state) { reducer }
     self.timeout = 1 * NSEC_PER_SEC
+    self.sharedChangeTracker = sharedChangeTracker
     self.useMainSerialExecutor = true
   }
 
@@ -621,7 +621,7 @@ public final class TestStore<State, Action> {
       XCTFailHelper(
         """
         The store received \(self.reducer.receivedActions.count) unexpected \
-        action\(self.reducer.receivedActions.count == 1 ? "" : "s") after this one: …
+        action\(self.reducer.receivedActions.count == 1 ? "" : "s") by the end of this test: …
 
           Unhandled actions:
         \(actions)
@@ -658,7 +658,27 @@ public final class TestStore<State, Action> {
         line: effect.action.line
       )
     }
-    self.dependencies[SharedChangeTrackerKey.self]?.assertUnchanged()
+    // NB: This existential opening can go away if we can constrain 'State: Equatable' at the
+    //     'TestStore' level, but for some reason this breaks DocC.
+    if self.sharedChangeTracker.hasChanges, let stateType = State.self as? any Equatable.Type {
+      func open<EquatableState: Equatable>(_: EquatableState.Type) {
+        let store = self as! TestStore<EquatableState, Action>
+        try? store.expectedStateShouldMatch(
+          preamble: "Test store completed before asserting against changes to shared state",
+          postamble: """
+            Invoke "TestStore.assert" at the end of this test to assert against changes to shared \
+            state.
+            """,
+          expected: store.state,
+          actual: store.state,
+          updateStateToExpectedResult: nil,
+          skipUnnecessaryModifyFailure: true,
+          file: store.file,
+          line: store.line
+        )
+      }
+      open(stateType)
+    }
   }
 
   /// Overrides the store's dependencies for a given operation.
@@ -853,10 +873,12 @@ extension TestStore where State: Equatable {
       let expectedState = self.state
       let previousState = self.reducer.state
       let previousStackElementID = self.reducer.dependencies.stackElementID.incrementingCopy()
-      let task = self.store.send(
-        .init(origin: .send(action), file: file, line: line),
-        originatingFrom: nil
-      )
+      let task = self.sharedChangeTracker.track {
+        self.store.send(
+          .init(origin: .send(action), file: file, line: line),
+          originatingFrom: nil
+        )
+      }
       if uncheckedUseMainSerialExecutor {
         await Task.yield()
       } else {
@@ -883,9 +905,6 @@ extension TestStore where State: Equatable {
         )
       } catch {
         XCTFail("Threw error: \(error)", file: file, line: line)
-      }
-      if "\(self.file)" == "\(file)" {
-        self.line = line
       }
       // NB: Give concurrency runtime more time to kick off effects so users don't need to manually
       //     instrument their effects.
@@ -950,6 +969,8 @@ extension TestStore where State: Equatable {
   }
 
   private func expectedStateShouldMatch(
+    preamble: String = "",
+    postamble: String = "",
     expected: State,
     actual: State,
     updateStateToExpectedResult: ((inout State) throws -> Void)? = nil,
@@ -957,19 +978,12 @@ extension TestStore where State: Equatable {
     file: StaticString,
     line: UInt
   ) throws {
-    let changeTracker = self.reducer.dependencies[SharedChangeTrackerKey.self]
-    try Dependencies.withDependencies {
-      $0[SharedChangeTrackerKey.self] = changeTracker
-    } operation: {
-      let wasAsserting = changeTracker?.isAsserting
-      changeTracker?.isAsserting = true
-      defer { changeTracker?.isAsserting = wasAsserting ?? false }
-
+    try self.sharedChangeTracker.assert {
       let skipUnnecessaryModifyFailure =
         skipUnnecessaryModifyFailure
-        || changeTracker?.hasChanges == true
+        || self.sharedChangeTracker.hasChanges == true
       if self.exhaustivity != .on {
-        changeTracker?.resetChanges()
+        self.sharedChangeTracker.resetChanges()
       }
 
       let current = expected
@@ -996,6 +1010,7 @@ extension TestStore where State: Equatable {
         if let updateStateToExpectedResult {
           try Dependencies.withDependencies {
             $0 = self.reducer.dependencies
+            $0.sharedChangeTracker = self.sharedChangeTracker
           } operation: {
             try updateStateToExpectedResult(&expectedWhenGivenPreviousState)
           }
@@ -1013,6 +1028,7 @@ extension TestStore where State: Equatable {
         if let updateStateToExpectedResult {
           try Dependencies.withDependencies {
             $0 = self.reducer.dependencies
+            $0.sharedChangeTracker = self.sharedChangeTracker
           } operation: {
             try updateStateToExpectedResult(&expectedWhenGivenActualState)
           }
@@ -1032,6 +1048,7 @@ extension TestStore where State: Equatable {
               do {
                 try Dependencies.withDependencies {
                   $0 = self.reducer.dependencies
+                  $0.sharedChangeTracker = self.sharedChangeTracker
                 } operation: {
                   try updateStateToExpectedResult(&expectedWhenGivenPreviousState)
                 }
@@ -1072,14 +1089,16 @@ extension TestStore where State: Equatable {
             """
         }
         let messageHeading =
-          updateStateToExpectedResult != nil
-          ? "A state change does not match expectation"
-          : "State was not expected to change, but a change occurred"
+          !preamble.isEmpty
+          ? preamble
+          : updateStateToExpectedResult != nil
+            ? "A state change does not match expectation"
+            : "State was not expected to change, but a change occurred"
         XCTFailHelper(
           """
           \(messageHeading): …
 
-          \(difference)
+          \(difference)\(postamble.isEmpty ? "" : "\n\n\(postamble)")
           """,
           file: file,
           line: line
@@ -1104,7 +1123,7 @@ extension TestStore where State: Equatable {
           line: line
         )
       }
-      self.reducer.dependencies[SharedChangeTrackerKey.self]?.resetChanges()
+      self.sharedChangeTracker.resetChanges()
     }
   }
 }
@@ -1855,9 +1874,6 @@ extension TestStore where State: Equatable {
       }
     }
     self.reducer.state = state
-    if "\(self.file)" == "\(file)" {
-      self.line = line
-    }
   }
 
   @MainActor
@@ -2552,7 +2568,7 @@ extension TestStore {
   @available(
     *,
     unavailable,
-    message: "'State' and 'Action' must conform to 'Equatable' to assert against received actions."
+    message: "Provide a key path to the case you expect to receive (like 'store.receive(\\.tap)'), or conform 'Action' to 'Equatable' to assert against it directly."
   )
   public func receive(
     _ expectedAction: Action,
@@ -2560,19 +2576,5 @@ extension TestStore {
     file: StaticString = #file,
     line: UInt = #line
   ) async {
-  }
-
-  @MainActor
-  @discardableResult
-  @available(
-    *, unavailable, message: "'State' must conform to 'Equatable' to assert against sent actions."
-  )
-  public func send(
-    _ action: Action,
-    assert updateStateToExpectedResult: ((_ state: inout State) throws -> Void)? = nil,
-    file: StaticString = #file,
-    line: UInt = #line
-  ) async -> TestStoreTask {
-    TestStoreTask(rawValue: nil, timeout: 0)
   }
 }

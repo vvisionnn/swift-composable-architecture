@@ -1,8 +1,7 @@
 # Migrating to 1.10
 
 Update your code to make use of the new state sharing tools in the library, such as the ``Shared``
-property wrapper, and the ``PersistenceKey/appStorage(_:)-9zd2f`` and 
-``PersistenceKey/fileStorage(_:)`` persistence strategies.
+property wrapper, and the ``AppStorageKey`` and ``FileStorageKey`` persistence strategies.
 
 ## Overview
 
@@ -11,7 +10,7 @@ simplify the library, and make it more powerful. This version of the library onl
 APIs and did not deprecate any existing APIs.
 
 > Important: Before following this migration guide be sure you have fully migrated to the newest
-> tools of version 1.8. See <doc:MigrationGuides> for more information.
+> tools of version 1.9. See <doc:MigrationGuides> for more information.
 
 ## Sharing state
 
@@ -34,7 +33,7 @@ will be instantly observed by all features holding onto it.
 
 Further, there are persistence strategies one can employ in `@Shared`. For example, if you want any
 changes of `signUpData` to be automatically persisted to the file system you can use the
-``PersistenceKey/fileStorage(_:)`` and specify a URL:
+``PersistenceReaderKey/fileStorage(_:)`` and specify a URL:
 
 ```swift
 @ObservableState
@@ -49,7 +48,7 @@ will automatically be persisted to disk. Further, if the disk version changes, a
 `signUpData` in the application will automatically update.
 
 There is another persistence strategy for storing simple data types in user defaults, called
-``PersistenceKey/appStorage(_:)-9zd2f``. It can refer to a value in user defaults by a string
+``PersistenceReaderKey/appStorage(_:)-4l5b``. It can refer to a value in user defaults by a string
 key:
 
 ```swift
@@ -60,8 +59,8 @@ struct State {
 }
 ```
 
-Similar to ``PersistenceKey/fileStorage(_:)``, upon launch of the application the initial value
-of `isOn` will be populated from user defaults, and any change to `isOn` will be automatically 
+Similar to ``PersistenceReaderKey/fileStorage(_:)``, upon launch of the application the initial
+value of `isOn` will be populated from user defaults, and any change to `isOn` will be automatically
 persisted to user defaults. Further, if the user defaults value changes, all instances of `isOn`
 in the application will automatically update.
 

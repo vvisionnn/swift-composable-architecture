@@ -34,7 +34,7 @@ struct SyncUpDetail {
 
     @CasePathable
     enum Delegate {
-      case startMeeting
+      case startMeeting(Shared<SyncUp>)
     }
   }
 
@@ -63,15 +63,15 @@ struct SyncUpDetail {
       case let .destination(.presented(.alert(alertAction))):
         switch alertAction {
         case .confirmDeletion:
-          @Shared(.syncUps) var syncUps: IdentifiedArrayOf<SyncUp> = []
+          @Shared(.syncUps) var syncUps
           syncUps.remove(id: state.syncUp.id)
-          return .run { _ in await self.dismiss() }
+          return .run { _ in await dismiss() }
 
         case .continueWithoutRecording:
-          return .send(.delegate(.startMeeting))
+          return .send(.delegate(.startMeeting(state.$syncUp)))
 
         case .openSettings:
-          return .run { _ in await self.openSettings() }
+          return .run { _ in await openSettings() }
         }
 
       case .destination:
@@ -89,9 +89,9 @@ struct SyncUpDetail {
         return .none
 
       case .startMeetingButtonTapped:
-        switch self.authorizationStatus() {
+        switch authorizationStatus() {
         case .notDetermined, .authorized:
-          return .send(.delegate(.startMeeting))
+          return .send(.delegate(.startMeeting(state.$syncUp)))
 
         case .denied:
           state.destination = .alert(.speechRecognitionDenied)
@@ -186,19 +186,21 @@ struct SyncUpDetailView: View {
     }
     .navigationTitle(store.syncUp.title)
     .alert($store.scope(state: \.destination?.alert, action: \.destination.alert))
-    .sheet(item: $store.scope(state: \.destination?.edit, action: \.destination.edit)) { store in
+    .sheet(
+      item: $store.scope(state: \.destination?.edit, action: \.destination.edit)
+    ) { editSyncUpStore in
       NavigationStack {
-        SyncUpFormView(store: store)
-          .navigationTitle(self.store.syncUp.title)
+        SyncUpFormView(store: editSyncUpStore)
+          .navigationTitle(store.syncUp.title)
           .toolbar {
             ToolbarItem(placement: .cancellationAction) {
               Button("Cancel") {
-                self.store.send(.cancelEditButtonTapped)
+                store.send(.cancelEditButtonTapped)
               }
             }
             ToolbarItem(placement: .confirmationAction) {
               Button("Done") {
-                self.store.send(.doneEditingButtonTapped)
+                store.send(.doneEditingButtonTapped)
               }
             }
           }

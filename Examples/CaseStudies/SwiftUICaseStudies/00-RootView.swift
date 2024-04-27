@@ -83,18 +83,11 @@ struct RootView: View {
               SharedStateFileStorageView(store: store)
             }
           }
-          NavigationLink("Sandboxed shared state") {
-            Demo(
-              store: Store(initialState: SharedStateSandboxing.State()) { SharedStateSandboxing() }
-            ) { store in
-              SharedStateSandboxingView(store: store)
-            }
-          }
           NavigationLink("Notifications") {
             Demo(
-              store: Store(
-                initialState: SharedStateNotifications.State()
-              ) { SharedStateNotifications() }
+              store: Store(initialState: SharedStateNotifications.State()) {
+                SharedStateNotifications()
+              }
             ) { store in
               SharedStateNotificationsView(store: store)
             }
@@ -150,7 +143,7 @@ struct RootView: View {
 
         Section {
           Button("Stack") {
-            self.isNavigationStackCaseStudyPresented = true
+            isNavigationStackCaseStudyPresented = true
           }
           .buttonStyle(.plain)
 
@@ -219,7 +212,7 @@ struct RootView: View {
         }
       }
       .navigationTitle("Case Studies")
-      .sheet(isPresented: self.$isNavigationStackCaseStudyPresented) {
+      .sheet(isPresented: $isNavigationStackCaseStudyPresented) {
         Demo(store: Store(initialState: NavigationDemo.State()) { NavigationDemo() }) { store in
           NavigationDemoView(store: store)
         }
@@ -242,7 +235,7 @@ struct Demo<State, Action, Content: View>: View {
   }
 
   var body: some View {
-    self.content(self.store)
+    content(store)
   }
 }
 
