@@ -1,6 +1,8 @@
 import ComposableArchitecture
 import XCTest
 
+@testable import CounterApp
+
 @MainActor
 final class CounterFeatureTests: XCTestCase {
   func testCounter() async {
@@ -8,11 +10,29 @@ final class CounterFeatureTests: XCTestCase {
       CounterFeature()
     }
     
-    await store.send(.incrementButtonTapped) {
-      $0.count = 1
-    }
-    await store.send(.decrementButtonTapped) {
-      $0.count = 0
-    }
+    await store.send(.incrementButtonTapped)
+    // ❌ State was not expected to change, but a change occurred: …
+    //
+    //       CounterFeature.State(
+    //     −   count: 0,
+    //     +   count: 1,
+    //         fact: nil,
+    //         isLoading: false,
+    //         isTimerRunning: false
+    //       )
+    //
+    // (Expected: −, Actual: +)
+    await store.send(.decrementButtonTapped)
+    // ❌ State was not expected to change, but a change occurred: …
+    //
+    //       CounterFeature.State(
+    //     −   count: 1,
+    //     +   count: 0,
+    //         fact: nil,
+    //         isLoading: false,
+    //         isTimerRunning: false
+    //       )
+    //
+    // (Expected: −, Actual: +)
   }
 }

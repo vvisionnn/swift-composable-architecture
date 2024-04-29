@@ -3,30 +3,36 @@ import XCTest
 
 @testable import SyncUps
 
-@MainActor
 final class RecordMeetingTests: XCTestCase {
-  func testTimer() async throws {
+  @MainActor
+  func testTimer() async {
     let clock = TestClock()
     let dismissed = self.expectation(description: "dismissed")
 
     let store = TestStore(
       initialState: RecordMeeting.State(
-        syncUp: SyncUp(
-          id: SyncUp.ID(),
-          attendees: [
-            Attendee(id: Attendee.ID()),
-            Attendee(id: Attendee.ID()),
-            Attendee(id: Attendee.ID()),
-          ],
-          duration: .seconds(6)
+        syncUp: Shared(
+          SyncUp(
+            id: SyncUp.ID(),
+            attendees: [
+              Attendee(id: Attendee.ID()),
+              Attendee(id: Attendee.ID()),
+              Attendee(id: Attendee.ID()),
+            ],
+            duration: .seconds(6)
+          )
         )
       )
     ) {
       RecordMeeting()
     } withDependencies: {
       $0.continuousClock = clock
-      $0.dismiss = DismissEffect { dismissed.fulfill() }
+      $0.date.now = Date(timeIntervalSince1970: 1_234_567_890)
+      $0.dismiss = DismissEffect {
+        dismissed.fulfill()
+      }
       $0.speechClient.authorizationStatus = { .denied }
+      $0.uuid = .incrementing
     }
 
     let onTask = await store.send(.onTask)
@@ -70,36 +76,48 @@ final class RecordMeetingTests: XCTestCase {
     await store.receive(\.timerTick) {
       $0.speakerIndex = 2
       $0.secondsElapsed = 6
+      $0.syncUp.meetings.insert(
+        Meeting(
+          id: Meeting.ID(UUID(0)),
+          date: Date(timeIntervalSince1970: 1_234_567_890),
+          transcript: ""
+        ),
+        at: 0
+      )
       XCTAssertEqual($0.durationRemaining, .seconds(0))
     }
 
-    // NB: this improves on the onMeetingFinished pattern from vanilla SwiftUI
-    await store.receive(\.delegate.save)
-
+    #if swift(>=5.10)
+      nonisolated(unsafe) let `self` = self
+    #endif
     await self.fulfillment(of: [dismissed])
     await onTask.cancel()
   }
 
-  func testRecordTranscript() async throws {
+  @MainActor
+  func testRecordTranscript() async {
     let clock = TestClock()
     let dismissed = self.expectation(description: "dismissed")
 
     let store = TestStore(
       initialState: RecordMeeting.State(
-        syncUp: SyncUp(
-          id: SyncUp.ID(),
-          attendees: [
-            Attendee(id: Attendee.ID()),
-            Attendee(id: Attendee.ID()),
-            Attendee(id: Attendee.ID()),
-          ],
-          duration: .seconds(6)
+        syncUp: Shared(
+          SyncUp(
+            id: SyncUp.ID(),
+            attendees: [
+              Attendee(id: Attendee.ID()),
+              Attendee(id: Attendee.ID()),
+              Attendee(id: Attendee.ID()),
+            ],
+            duration: .seconds(6)
+          )
         )
       )
     ) {
       RecordMeeting()
     } withDependencies: {
       $0.continuousClock = clock
+      $0.date.now = Date(timeIntervalSince1970: 1_234_567_890)
       $0.dismiss = DismissEffect { dismissed.fulfill() }
       $0.speechClient.authorizationStatus = { .authorized }
       $0.speechClient.startTask = { @Sendable _ in
@@ -113,6 +131,7 @@ final class RecordMeetingTests: XCTestCase {
           continuation.finish()
         }
       }
+      $0.uuid = .incrementing
     }
 
     let onTask = await store.send(.onTask)
@@ -131,22 +150,28 @@ final class RecordMeetingTests: XCTestCase {
       await store.receive(\.timerTick)
     }
 
-    await store.receive(\.delegate.save)
+    XCTAssertEqual(store.state.syncUp.meetings[0].transcript, "I completed the project")
 
+    #if swift(>=5.10)
+      nonisolated(unsafe) let `self` = self
+    #endif
     await self.fulfillment(of: [dismissed])
     await onTask.cancel()
   }
 
-  func testEndMeetingSave() async throws {
+  @MainActor
+  func testEndMeetingSave() async {
     let clock = TestClock()
     let dismissed = self.expectation(description: "dismissed")
 
-    let store = TestStore(initialState: RecordMeeting.State(syncUp: .mock)) {
+    let store = TestStore(initialState: RecordMeeting.State(syncUp: Shared(.mock))) {
       RecordMeeting()
     } withDependencies: {
       $0.continuousClock = clock
+      $0.date.now = Date(timeIntervalSince1970: 1_234_567_890)
       $0.dismiss = DismissEffect { dismissed.fulfill() }
       $0.speechClient.authorizationStatus = { .denied }
+      $0.uuid = .incrementing
     }
 
     let onTask = await store.send(.onTask)
@@ -162,19 +187,29 @@ final class RecordMeetingTests: XCTestCase {
 
     await store.send(\.alert.confirmSave) {
       $0.alert = nil
+      $0.syncUp.meetings.insert(
+        Meeting(
+          id: Meeting.ID(UUID(0)),
+          date: Date(timeIntervalSince1970: 1_234_567_890),
+          transcript: ""
+        ),
+        at: 0
+      )
     }
 
-    await store.receive(\.delegate.save)
-
+    #if swift(>=5.10)
+      nonisolated(unsafe) let `self` = self
+    #endif
     await self.fulfillment(of: [dismissed])
     await onTask.cancel()
   }
 
-  func testEndMeetingDiscard() async throws {
+  @MainActor
+  func testEndMeetingDiscard() async {
     let clock = TestClock()
     let dismissed = self.expectation(description: "dismissed")
 
-    let store = TestStore(initialState: RecordMeeting.State(syncUp: .mock)) {
+    let store = TestStore(initialState: RecordMeeting.State(syncUp: Shared(.mock))) {
       RecordMeeting()
     } withDependencies: {
       $0.continuousClock = clock
@@ -192,32 +227,40 @@ final class RecordMeetingTests: XCTestCase {
       $0.alert = nil
     }
 
+    #if swift(>=5.10)
+      nonisolated(unsafe) let `self` = self
+    #endif
     await self.fulfillment(of: [dismissed])
     await task.cancel()
   }
 
-  func testNextSpeaker() async throws {
+  @MainActor
+  func testNextSpeaker() async {
     let clock = TestClock()
     let dismissed = self.expectation(description: "dismissed")
 
     let store = TestStore(
       initialState: RecordMeeting.State(
-        syncUp: SyncUp(
-          id: SyncUp.ID(),
-          attendees: [
-            Attendee(id: Attendee.ID()),
-            Attendee(id: Attendee.ID()),
-            Attendee(id: Attendee.ID()),
-          ],
-          duration: .seconds(6)
+        syncUp: Shared(
+          SyncUp(
+            id: SyncUp.ID(),
+            attendees: [
+              Attendee(id: Attendee.ID()),
+              Attendee(id: Attendee.ID()),
+              Attendee(id: Attendee.ID()),
+            ],
+            duration: .seconds(6)
+          )
         )
       )
     ) {
       RecordMeeting()
     } withDependencies: {
       $0.continuousClock = clock
+      $0.date.now = Date(timeIntervalSince1970: 1_234_567_890)
       $0.dismiss = DismissEffect { dismissed.fulfill() }
       $0.speechClient.authorizationStatus = { .denied }
+      $0.uuid = .incrementing
     }
 
     let onTask = await store.send(.onTask)
@@ -238,33 +281,47 @@ final class RecordMeetingTests: XCTestCase {
 
     await store.send(\.alert.confirmSave) {
       $0.alert = nil
+      $0.syncUp.meetings.insert(
+        Meeting(
+          id: Meeting.ID(UUID(0)),
+          date: Date(timeIntervalSince1970: 1_234_567_890),
+          transcript: ""
+        ),
+        at: 0
+      )
     }
 
-    await store.receive(\.delegate.save)
+    #if swift(>=5.10)
+      nonisolated(unsafe) let `self` = self
+    #endif
     await self.fulfillment(of: [dismissed])
     await onTask.cancel()
   }
 
-  func testSpeechRecognitionFailure_Continue() async throws {
+  @MainActor
+  func testSpeechRecognitionFailure_Continue() async {
     let clock = TestClock()
     let dismissed = self.expectation(description: "dismissed")
 
     let store = TestStore(
       initialState: RecordMeeting.State(
-        syncUp: SyncUp(
-          id: SyncUp.ID(),
-          attendees: [
-            Attendee(id: Attendee.ID()),
-            Attendee(id: Attendee.ID()),
-            Attendee(id: Attendee.ID()),
-          ],
-          duration: .seconds(6)
+        syncUp: Shared(
+          SyncUp(
+            id: SyncUp.ID(),
+            attendees: [
+              Attendee(id: Attendee.ID()),
+              Attendee(id: Attendee.ID()),
+              Attendee(id: Attendee.ID()),
+            ],
+            duration: .seconds(6)
+          )
         )
       )
     ) {
       RecordMeeting()
     } withDependencies: {
       $0.continuousClock = clock
+      $0.date.now = Date(timeIntervalSince1970: 1_234_567_890)
       $0.dismiss = DismissEffect { dismissed.fulfill() }
       $0.speechClient.authorizationStatus = { .authorized }
       $0.speechClient.startTask = { @Sendable _ in
@@ -279,6 +336,7 @@ final class RecordMeetingTests: XCTestCase {
           $0.finish(throwing: SpeechRecognitionFailure())
         }
       }
+      $0.uuid = .incrementing
     }
 
     let onTask = await store.send(.onTask)
@@ -307,16 +365,19 @@ final class RecordMeetingTests: XCTestCase {
     await store.receive(\.timerTick)
     store.exhaustivity = .on
 
-    await store.receive(\.delegate.save)
+    #if swift(>=5.10)
+      nonisolated(unsafe) let `self` = self
+    #endif
     await self.fulfillment(of: [dismissed])
     await onTask.cancel()
   }
 
-  func testSpeechRecognitionFailure_Discard() async throws {
+  @MainActor
+  func testSpeechRecognitionFailure_Discard() async {
     let clock = TestClock()
     let dismissed = self.expectation(description: "dismissed")
 
-    let store = TestStore(initialState: RecordMeeting.State(syncUp: .mock)) {
+    let store = TestStore(initialState: RecordMeeting.State(syncUp: Shared(.mock))) {
       RecordMeeting()
     } withDependencies: {
       $0.continuousClock = clock
@@ -340,6 +401,9 @@ final class RecordMeetingTests: XCTestCase {
       $0.alert = nil
     }
 
+    #if swift(>=5.10)
+      nonisolated(unsafe) let `self` = self
+    #endif
     await self.fulfillment(of: [dismissed])
     await onTask.cancel()
   }
