@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import UIKit
 import OrderedCollections
 import Combine
@@ -179,3 +180,4 @@ fileprivate func returningLastNonNilValue<A, B>(
 		return lastWrapped
 	}
 }
+#endif

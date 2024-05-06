@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import UIKit
 
 open class NavigationPresentationViewController: UINavigationController, ViewControllerPresentable {
@@ -9,3 +10,4 @@ open class NavigationPresentationViewController: UINavigationController, ViewCon
 		checkDismissedIfNeeded()
 	}
 }
+#endif

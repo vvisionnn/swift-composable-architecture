@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import SwiftUI
 
 open class HostingPresentationViewController<
@@ -20,3 +21,4 @@ open class HostingPresentationViewController<
 		fatalError("init(coder:) has not been implemented")
 	}
 }
+#endif

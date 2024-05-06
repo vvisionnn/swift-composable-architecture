@@ -1,3 +1,4 @@
+#if canImport(UIKit)
 import UIKit
 import Combine
 
@@ -10,3 +11,4 @@ open class PresentationViewController: UIViewController, ViewControllerPresentab
 		checkDismissedIfNeeded()
 	}
 }
+#endif
