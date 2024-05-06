@@ -126,6 +126,26 @@
     }
   }
 
+	extension DependencyKeyWritingReducerTests {
+		func testOverride() async {
+			let reducer: _DependencyKeyWritingReducer<Feature> = Feature()
+				.dependency(MyValue.self, 1024)
+			
+			XCTAssertTrue((reducer as Any) is _DependencyKeyWritingReducer<Feature>)
+		}
+		
+		@MainActor
+		func testAccessOverride() async {
+			let store = TestStore(initialState: Feature.State()) {
+				Feature()
+					.dependency(MyValue.self, 1024)
+			}
+			
+			await store.send(.tap) { $0.value = 1024 }
+		}
+	}
+
+
   @Reducer
   private struct Feature {
     @Dependency(\.myValue) var myValue
