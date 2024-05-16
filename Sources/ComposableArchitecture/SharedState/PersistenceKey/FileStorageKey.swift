@@ -23,6 +23,10 @@ public final class FileStorageKey<Value: Codable & Sendable>: PersistenceKey, Se
   let value = LockIsolated<Value?>(nil)
   let workItem = LockIsolated<DispatchWorkItem?>(nil)
 
+  public var id: AnyHashable {
+    FileStorageKeyID(url: self.url, storage: self.storage)
+  }
+
   public init(url: URL) {
     @Dependency(\.defaultFileStorage) var storage
     self.storage = storage
@@ -42,11 +46,15 @@ public final class FileStorageKey<Value: Codable & Sendable>: PersistenceKey, Se
       self.isSetting.setValue(true)
       try? self.storage.save(JSONEncoder().encode(value), self.url)
       let workItem = DispatchWorkItem { [weak self] in
-        guard let self, let value = self.value.value else { return }
+        guard let self else { return }
+        defer {
+          self.value.setValue(nil)
+          self.workItem.setValue(nil)
+        }
+        guard let value = self.value.value
+        else { return }
         self.isSetting.setValue(true)
         try? self.storage.save(JSONEncoder().encode(value), self.url)
-        self.value.setValue(nil)
-        self.workItem.setValue(nil)
       }
       self.workItem.setValue(workItem)
       if canListenForResignActive {
@@ -149,15 +157,9 @@ public final class FileStorageKey<Value: Codable & Sendable>: PersistenceKey, Se
   }
 }
 
-extension FileStorageKey: Hashable {
-  public static func == (lhs: FileStorageKey, rhs: FileStorageKey) -> Bool {
-    lhs.url == rhs.url && lhs.storage.id == rhs.storage.id
-  }
-
-  public func hash(into hasher: inout Hasher) {
-    hasher.combine(self.url)
-    hasher.combine(self.storage.id)
-  }
+private struct FileStorageKeyID: Hashable {
+  let url: URL
+  let storage: FileStorage
 }
 
 private enum FileStorageDependencyKey: DependencyKey {
@@ -202,7 +204,7 @@ extension DependencyValues {
 }
 
 /// A type that encapsulates saving and loading data from disk.
-public struct FileStorage: Sendable {
+public struct FileStorage: Hashable, Sendable {
   let id: AnyHashableSendable
   let async: @Sendable (DispatchWorkItem) -> Void
   let asyncAfter: @Sendable (DispatchTimeInterval, DispatchWorkItem) -> Void
@@ -299,5 +301,13 @@ public struct FileStorage: Sendable {
     func hash(into hasher: inout Hasher) {
       hasher.combine(self.id)
     }
+  }
+
+  public static func == (lhs: Self, rhs: Self) -> Bool {
+    lhs.id == rhs.id
+  }
+
+  public func hash(into hasher: inout Hasher) {
+    hasher.combine(self.id)
   }
 }

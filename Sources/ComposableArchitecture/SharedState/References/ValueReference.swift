@@ -10,7 +10,7 @@ import Foundation
 
 extension Shared {
   public init(
-    wrappedValue value: Value,
+    wrappedValue value: @autoclosure @escaping () -> Value,
     _ persistenceKey: some PersistenceKey<Value>,
     fileID: StaticString = #fileID,
     line: UInt = #line
@@ -19,16 +19,24 @@ extension Shared {
       reference: {
         @Dependency(\.persistentReferences) var references
         return references.withValue {
-          if let reference = $0[persistenceKey] {
+          if let reference = $0[persistenceKey.id] {
+            precondition(
+              reference.valueType == Value.self,
+              """
+              "\(typeName(Value.self, genericsAbbreviated: false))" does not match existing \
+              persistent reference "\(typeName(reference.valueType, genericsAbbreviated: false))" \
+              (key: "\(persistenceKey.id)")
+              """
+            )
             return reference
           } else {
             let reference = ValueReference(
-              initialValue: value,
+              initialValue: value(),
               persistenceKey: persistenceKey,
               fileID: fileID,
               line: line
             )
-            $0[persistenceKey] = reference
+            $0[persistenceKey.id] = reference
             return reference
           }
         }
@@ -52,11 +60,52 @@ extension Shared {
     fileID: StaticString = #fileID,
     line: UInt = #line
   ) throws {
-    guard let initialValue = persistenceKey.load(initialValue: nil)
-    else {
-      throw LoadError()
-    }
-    self.init(wrappedValue: initialValue, persistenceKey, fileID: fileID, line: line)
+    try self.init(
+      throwingValue: {
+        guard let initialValue = persistenceKey.load(initialValue: nil)
+        else { throw LoadError() }
+        return initialValue
+      }(),
+      persistenceKey,
+      fileID: fileID,
+      line: line
+    )
+  }
+
+  private init(
+    throwingValue value: @autoclosure @escaping () throws -> Value,
+    _ persistenceKey: some PersistenceKey<Value>,
+    fileID: StaticString = #fileID,
+    line: UInt = #line
+  ) throws {
+    try self.init(
+      reference: {
+        @Dependency(\.persistentReferences) var references
+        return try references.withValue {
+          if let reference = $0[persistenceKey.id] {
+            precondition(
+              reference.valueType == Value.self,
+              """
+              "\(typeName(Value.self, genericsAbbreviated: false))" does not match existing \
+              persistent reference "\(typeName(reference.valueType, genericsAbbreviated: false))" \
+              (key: "\(persistenceKey.id)")
+              """
+            )
+            return reference
+          } else {
+            let reference = try ValueReference(
+              initialValue: value(),
+              persistenceKey: persistenceKey,
+              fileID: fileID,
+              line: line
+            )
+            $0[persistenceKey.id] = reference
+            return reference
+          }
+        }
+      }(),
+      keyPath: \Value.self
+    )
   }
 
   public init<Key: PersistenceKey>(
@@ -65,7 +114,7 @@ extension Shared {
     line: UInt = #line
   ) where Key.Value == Value {
     self.init(
-      wrappedValue: persistenceKey.load(initialValue: nil) ?? persistenceKey.defaultValue,
+      wrappedValue: persistenceKey.load(initialValue: nil) ?? persistenceKey.defaultValue(),
       persistenceKey.base,
       fileID: fileID,
       line: line
@@ -73,13 +122,13 @@ extension Shared {
   }
 
   public init<Key: PersistenceKey>(
-    wrappedValue: Value,
+    wrappedValue: @autoclosure @escaping () -> Value,
     _ persistenceKey: PersistenceKeyDefault<Key>,
     fileID: StaticString = #fileID,
     line: UInt = #line
   ) where Key.Value == Value {
     self.init(
-      wrappedValue: wrappedValue,
+      wrappedValue: wrappedValue(),
       persistenceKey.base,
       fileID: fileID,
       line: line
@@ -89,7 +138,7 @@ extension Shared {
 
 extension SharedReader {
   public init(
-    wrappedValue value: Value,
+    wrappedValue value: @autoclosure @escaping () -> Value,
     _ persistenceKey: some PersistenceReaderKey<Value>,
     fileID: StaticString = #fileID,
     line: UInt = #line
@@ -98,16 +147,23 @@ extension SharedReader {
       reference: {
         @Dependency(\.persistentReferences) var references
         return references.withValue {
-          if let reference = $0[persistenceKey] {
+          if let reference = $0[persistenceKey.id] {
+            precondition(
+              reference.valueType == Value.self,
+              """
+              Type mismatch at persistence key "\(persistenceKey.id)": \
+              \(reference.valueType) != \(Value.self)
+              """
+            )
             return reference
           } else {
             let reference = ValueReference(
-              initialValue: value,
+              initialValue: value(),
               persistenceKey: persistenceKey,
               fileID: fileID,
               line: line
             )
-            $0[persistenceKey] = reference
+            $0[persistenceKey.id] = reference
             return reference
           }
         }
@@ -131,11 +187,51 @@ extension SharedReader {
     fileID: StaticString = #fileID,
     line: UInt = #line
   ) throws {
-    guard let initialValue = persistenceKey.load(initialValue: nil)
-    else {
-      throw LoadError()
-    }
-    self.init(wrappedValue: initialValue, persistenceKey, fileID: fileID, line: line)
+    try self.init(
+      throwingValue: {
+        guard let initialValue = persistenceKey.load(initialValue: nil)
+        else { throw LoadError() }
+        return initialValue
+      }(),
+      persistenceKey,
+      fileID: fileID,
+      line: line
+    )
+  }
+
+  private init(
+    throwingValue value: @autoclosure @escaping () throws -> Value,
+    _ persistenceKey: some PersistenceReaderKey<Value>,
+    fileID: StaticString = #fileID,
+    line: UInt = #line
+  ) throws {
+    try self.init(
+      reference: {
+        @Dependency(\.persistentReferences) var references
+        return try references.withValue {
+          if let reference = $0[persistenceKey.id] {
+            precondition(
+              reference.valueType == Value.self,
+              """
+              Type mismatch at persistence key "\(persistenceKey.id)": \
+              \(reference.valueType) != \(Value.self)
+              """
+            )
+            return reference
+          } else {
+            let reference = ValueReference(
+              initialValue: try value(),
+              persistenceKey: persistenceKey,
+              fileID: fileID,
+              line: line
+            )
+            $0[persistenceKey.id] = reference
+            return reference
+          }
+        }
+      }(),
+      keyPath: \Value.self
+    )
   }
 
   public init<Key: PersistenceReaderKey>(
@@ -144,7 +240,7 @@ extension SharedReader {
     line: UInt = #line
   ) where Key.Value == Value {
     self.init(
-      wrappedValue: persistenceKey.load(initialValue: nil) ?? persistenceKey.defaultValue,
+      wrappedValue: persistenceKey.load(initialValue: nil) ?? persistenceKey.defaultValue(),
       persistenceKey.base,
       fileID: fileID,
       line: line
@@ -152,13 +248,13 @@ extension SharedReader {
   }
 
   public init<Key: PersistenceReaderKey>(
-    wrappedValue: Value,
+    wrappedValue: @autoclosure @escaping () -> Value,
     _ persistenceKey: PersistenceKeyDefault<Key>,
     fileID: StaticString = #fileID,
     line: UInt = #line
   ) where Key.Value == Value {
     self.init(
-      wrappedValue: wrappedValue,
+      wrappedValue: wrappedValue(),
       persistenceKey.base,
       fileID: fileID,
       line: line

@@ -493,6 +493,9 @@ public final class TestStore<State, Action> {
   private let sharedChangeTracker: SharedChangeTracker
   private let store: Store<State, TestReducer<State, Action>.TestAction>
 
+  /// Returns `true` if the store's feature has been dismissed.
+  public fileprivate(set) var isDismissed = false
+
   /// Creates a test store with an initial state and a reducer powering its runtime.
   ///
   /// See <doc:Testing> and the documentation of ``TestStore`` for more information on how to best
@@ -533,6 +536,7 @@ public final class TestStore<State, Action> {
     self.timeout = 1 * NSEC_PER_SEC
     self.sharedChangeTracker = sharedChangeTracker
     self.useMainSerialExecutor = true
+    self.reducer.store = self
   }
 
   // NB: Only needed until Xcode ships a macOS SDK that uses the 5.7 standard library.
@@ -569,8 +573,8 @@ public final class TestStore<State, Action> {
     file: StaticString = #file,
     line: UInt = #line
   ) async {
+    self.assertNoReceivedActions(file: file, line: line)
     Task.cancel(id: OnFirstAppearID())
-
     let nanoseconds = nanoseconds ?? self.timeout
     let start = DispatchTime.now().uptimeNanoseconds
     await Task.megaYield()
@@ -605,6 +609,7 @@ public final class TestStore<State, Action> {
       }
       await Task.yield()
     }
+    self.assertNoSharedChanges(file: file, line: line)
   }
 
   deinit {
@@ -613,23 +618,7 @@ public final class TestStore<State, Action> {
   }
 
   func completed() {
-    if !self.reducer.receivedActions.isEmpty {
-      let actions = self.reducer.receivedActions
-        .map(\.action)
-        .map { "    • " + debugCaseOutput($0, abbreviated: true) }
-        .joined(separator: "\n")
-      XCTFailHelper(
-        """
-        The store received \(self.reducer.receivedActions.count) unexpected \
-        action\(self.reducer.receivedActions.count == 1 ? "" : "s") by the end of this test: …
-
-          Unhandled actions:
-        \(actions)
-        """,
-        file: self.file,
-        line: self.line
-      )
-    }
+    self.assertNoReceivedActions(file: self.file, line: self.line)
     Task.cancel(id: OnFirstAppearID())
     for effect in self.reducer.inFlightEffects {
       XCTFailHelper(
@@ -644,27 +633,59 @@ public final class TestStore<State, Action> {
         • If using async/await in your effect, it may need a little bit of time to properly \
         finish. To fix you can simply perform "await store.finish()" at the end of your test.
 
-        • If an effect uses a clock/scheduler (via "receive(on:)", "delay", "debounce", etc.), \
-        make sure that you wait enough time for it to perform the effect. If you are using \
-        a test clock/scheduler, advance it so that the effects may complete, or consider \
-        using an immediate clock/scheduler to immediately perform the effect instead.
+        • If an effect uses a clock (or scheduler, via "receive(on:)", "delay", "debounce", etc.), \
+        make sure that you wait enough time for it to perform the effect. If you are using a test \
+        clock/scheduler, advance it so that the effects may complete, or consider using an \
+        immediate clock/scheduler to immediately perform the effect instead.
 
         • If you are returning a long-living effect (timers, notifications, subjects, etc.), \
         then make sure those effects are torn down by marking the effect ".cancellable" and \
         returning a corresponding cancellation effect ("Effect.cancel") from another action, or, \
         if your effect is driven by a Combine subject, send it a completion.
+
+        • If you do not wish to assert on these effects, perform "await \
+        store.skipInFlightEffects()", or consider using a non-exhaustive test store: \
+        "store.exhaustivity = .off".
         """,
         file: effect.action.file,
         line: effect.action.line
       )
     }
+    self.assertNoSharedChanges(file: self.file, line: self.line)
+  }
+
+  private func assertNoReceivedActions(file: StaticString, line: UInt) {
+    if !self.reducer.receivedActions.isEmpty {
+      let actions = self.reducer.receivedActions
+        .map(\.action)
+        .map { "    • " + debugCaseOutput($0, abbreviated: true) }
+        .joined(separator: "\n")
+      XCTFailHelper(
+        """
+        The store received \(self.reducer.receivedActions.count) unexpected \
+        action\(self.reducer.receivedActions.count == 1 ? "" : "s"): …
+
+          Unhandled actions:
+        \(actions)
+
+        To fix, explicitly assert against these actions using "store.receive", skip these actions \
+        by performing "await store.skipReceivedActions()", or consider using a non-exhaustive test \
+        store: "store.exhaustivity = .off".
+        """,
+        file: file,
+        line: line
+      )
+    }
+  }
+
+  private func assertNoSharedChanges(file: StaticString, line: UInt) {
     // NB: This existential opening can go away if we can constrain 'State: Equatable' at the
     //     'TestStore' level, but for some reason this breaks DocC.
     if self.sharedChangeTracker.hasChanges, let stateType = State.self as? any Equatable.Type {
       func open<EquatableState: Equatable>(_: EquatableState.Type) {
         let store = self as! TestStore<EquatableState, Action>
         try? store.expectedStateShouldMatch(
-          preamble: "Test store completed before asserting against changes to shared state",
+          preamble: "Test store finished before asserting against changes to shared state",
           postamble: """
             Invoke "TestStore.assert" at the end of this test to assert against changes to shared \
             state.
@@ -673,11 +694,12 @@ public final class TestStore<State, Action> {
           actual: store.state,
           updateStateToExpectedResult: nil,
           skipUnnecessaryModifyFailure: true,
-          file: store.file,
-          line: store.line
+          file: file,
+          line: line
         )
       }
       open(stateType)
+      self.sharedChangeTracker.resetChanges()
     }
   }
 
@@ -846,6 +868,10 @@ extension TestStore where State: Equatable {
     line: UInt = #line
   ) async -> TestStoreTask {
     await XCTFailContext.$current.withValue(XCTFailContext(file: file, line: line)) {
+      guard !self.isDismissed else {
+        XCTFail("Can't send action to dismissed test store.", file: file, line: line)
+        return TestStoreTask(rawValue: nil, timeout: self.timeout)
+      }
       if !self.reducer.receivedActions.isEmpty {
         var actions = ""
         customDump(self.reducer.receivedActions.map(\.action), to: &actions)
@@ -2114,7 +2140,7 @@ extension TestStore {
     _ = { self._skipInFlightEffects(strict: strict, file: file, line: line) }()
   }
 
-  private func _skipInFlightEffects(
+  fileprivate func _skipInFlightEffects(
     strict: Bool = true,
     file: StaticString = #file,
     line: UInt = #line
@@ -2425,6 +2451,7 @@ class TestReducer<State, Action>: Reducer {
   var inFlightEffects: Set<LongLivingEffect> = []
   var receivedActions: [(action: Action, state: State)] = []
   var state: State
+  weak var store: TestStore<State, Action>?
 
   init(
     _ base: Reduce<State, Action>,
@@ -2437,8 +2464,16 @@ class TestReducer<State, Action>: Reducer {
   }
 
   func reduce(into state: inout State, action: TestAction) -> Effect<TestAction> {
-    let reducer = self.base
-      .dependency(\.self, self.dependencies)
+    var dependencies = self.dependencies
+    let dismiss = dependencies.dismiss.dismiss
+    dependencies.dismiss = DismissEffect { [weak store] in
+      store?.withExhaustivity(.off) {
+        dismiss?()
+        store?._skipInFlightEffects(strict: false)
+        store?.isDismissed = true
+      }
+    }
+    let reducer = self.base.dependency(\.self, dependencies)
 
     let effects: Effect<Action>
     switch action.origin {
@@ -2577,5 +2612,6 @@ extension TestStore {
     file: StaticString = #file,
     line: UInt = #line
   ) async {
+    fatalError()
   }
 }
