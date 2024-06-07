@@ -33,7 +33,7 @@ struct RecordMeeting {
       case .onAppear:
         return .run { send in
           while true {
-            try await Task.sleep(for: seconds(1))
+            try await Task.sleep(for: .seconds(1))
             await send(.timerTick)
           }
         }
@@ -44,7 +44,7 @@ struct RecordMeeting {
         if state.secondsElapsed.isMultiple(of: secondsPerAttendee) {
           if state.secondsElapsed == state.syncUp.duration.components.seconds {
             state.syncUp.meetings.insert(
-              Meeting(id: Meeting.ID(), date: Date(), transcript: transcript),
+              Meeting(id: Meeting.ID(), date: Date(), transcript: state.transcript),
               at: 0
             )
           }
