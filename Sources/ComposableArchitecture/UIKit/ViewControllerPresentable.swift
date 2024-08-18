@@ -53,7 +53,7 @@ extension ViewControllerPresentable {
 		return store.publisher
 			.removeDuplicates(by: { toID($0) == toID($1) })
 			.withPrevious()
-			.receive(on: RunLoop.main)
+			.receive(on: DispatchQueue.main)
 			.sink { [weak self] (prevState, presentationState) in
 				guard let self else { return }
 				queue.enqueue { @MainActor in
