@@ -19,7 +19,6 @@ let package = Package(
   ],
   dependencies: [
     .package(url: "https://github.com/apple/swift-collections", from: "1.1.0"),
-    .package(url: "https://github.com/apple/swift-docc-plugin", from: "1.0.0"),
     .package(url: "https://github.com/google/swift-benchmark", from: "0.1.0"),
     .package(url: "https://github.com/pointfreeco/combine-schedulers", from: "1.0.2"),
     .package(url: "https://github.com/pointfreeco/swift-case-paths", from: "1.5.4"),
@@ -28,9 +27,10 @@ let package = Package(
     .package(url: "https://github.com/pointfreeco/swift-dependencies", from: "1.3.5"),
     .package(url: "https://github.com/pointfreeco/swift-identified-collections", from: "1.1.0"),
     .package(url: "https://github.com/pointfreeco/swift-macro-testing", from: "0.2.0"),
+    .package(url: "https://github.com/pointfreeco/swift-navigation", from: "2.1.0"),
     .package(url: "https://github.com/pointfreeco/swift-perception", from: "1.3.4"),
-    .package(url: "https://github.com/pointfreeco/swiftui-navigation", from: "1.5.3"),
     .package(url: "https://github.com/pointfreeco/xctest-dynamic-overlay", from: "1.2.2"),
+    .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.0.0"),
     .package(url: "https://github.com/swiftlang/swift-syntax", "509.0.0"..<"601.0.0-prerelease"),
   ],
   targets: [
@@ -48,7 +48,8 @@ let package = Package(
         .product(name: "IssueReporting", package: "xctest-dynamic-overlay"),
         .product(name: "OrderedCollections", package: "swift-collections"),
         .product(name: "Perception", package: "swift-perception"),
-        .product(name: "SwiftUINavigationCore", package: "swiftui-navigation"),
+        .product(name: "SwiftUINavigation", package: "swift-navigation"),
+        .product(name: "UIKitNavigation", package: "swift-navigation"),
       ],
       resources: [
         .process("Resources/PrivacyInfo.xcprivacy")
@@ -85,14 +86,11 @@ let package = Package(
   ]
 )
 
-//for target in package.targets where target.type != .system {
-//  target.swiftSettings = target.swiftSettings ?? []
-//  target.swiftSettings?.append(
-//    .unsafeFlags([
-//      "-c", "release",
-//      "-emit-module-interface", "-enable-library-evolution",
-//      "-Xfrontend", "-warn-concurrency",
-//      "-Xfrontend", "-enable-actor-data-race-checks",
-//    ])
-//  )
-//}
+#if compiler(>=6)
+  for target in package.targets where target.type != .system {
+    target.swiftSettings = target.swiftSettings ?? []
+    target.swiftSettings?.append(contentsOf: [
+      .enableExperimentalFeature("StrictConcurrency"),
+    ])
+  }
+#endif

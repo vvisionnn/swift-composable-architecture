@@ -2,6 +2,11 @@ import SwiftUI
 
 extension View {
   @_spi(Presentation)
+  #if swift(<5.10)
+    @MainActor(unsafe)
+  #else
+    @preconcurrency @MainActor
+  #endif
   public func presentation<State, Action, Content: View>(
     store: Store<PresentationState<State>, PresentationAction<Action>>,
     @ViewBuilder body: @escaping (
@@ -11,12 +16,17 @@ extension View {
     ) -> Content
   ) -> some View {
     self.presentation(store: store) { `self`, $item, destination in
-      body(self, $item.isPresent(), destination)
+      body(self, Binding($item), destination)
     }
   }
 
   @_disfavoredOverload
   @_spi(Presentation)
+  #if swift(<5.10)
+    @MainActor(unsafe)
+  #else
+    @preconcurrency @MainActor
+  #endif
   public func presentation<State, Action, Content: View>(
     store: Store<PresentationState<State>, PresentationAction<Action>>,
     @ViewBuilder body: @escaping (
@@ -35,6 +45,11 @@ extension View {
 
   @_disfavoredOverload
   @_spi(Presentation)
+  #if swift(<5.10)
+    @MainActor(unsafe)
+  #else
+    @preconcurrency @MainActor
+  #endif
   public func presentation<State, Action, Content: View>(
     store: Store<PresentationState<State>, PresentationAction<Action>>,
     id toID: @escaping (PresentationState<State>) -> AnyHashable?,
@@ -50,6 +65,11 @@ extension View {
   }
 
   @_spi(Presentation)
+  #if swift(<5.10)
+    @MainActor(unsafe)
+  #else
+    @preconcurrency @MainActor
+  #endif
   public func presentation<
     State,
     Action,
@@ -69,12 +89,17 @@ extension View {
     self.presentation(
       store: store, state: toDestinationState, action: fromDestinationAction
     ) { `self`, $item, destination in
-      body(self, $item.isPresent(), destination)
+      body(self, Binding($item), destination)
     }
   }
 
   @_disfavoredOverload
   @_spi(Presentation)
+  #if swift(<5.10)
+    @MainActor(unsafe)
+  #else
+    @preconcurrency @MainActor
+  #endif
   public func presentation<
     State,
     Action,
@@ -102,6 +127,11 @@ extension View {
 
   @_spi(Presentation)
   @ViewBuilder
+  #if swift(<5.10)
+    @MainActor(unsafe)
+  #else
+    @preconcurrency @MainActor
+  #endif
   public func presentation<
     State,
     Action,
@@ -152,7 +182,7 @@ public struct PresentationStore<
     ) -> Content
   ) where State == DestinationState, Action == DestinationAction {
     self.init(store) { $item, destination in
-      content($item.isPresent(), destination)
+      content(Binding($item), destination)
     }
   }
 
@@ -183,7 +213,7 @@ public struct PresentationStore<
     self.init(
       store, state: toDestinationState, action: fromDestinationAction
     ) { $item, destination in
-      content($item.isPresent(), destination)
+      content(Binding($item), destination)
     }
   }
 
@@ -305,6 +335,11 @@ public struct AnyIdentifiable: Identifiable {
   }
 }
 
+#if swift(<5.10)
+  @MainActor(unsafe)
+#else
+  @preconcurrency@MainActor
+#endif
 @_spi(Presentation)
 public struct DestinationContent<State, Action> {
   let store: Store<State?, Action>

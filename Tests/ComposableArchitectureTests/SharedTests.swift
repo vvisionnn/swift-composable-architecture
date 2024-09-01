@@ -96,11 +96,10 @@ final class SharedTests: XCTestCase {
     XCTAssertEqual(store.state.sharedCount, 2)
   }
 
-  @MainActor
   func testMultiSharing() async {
     @Shared(Stats()) var stats
 
-    let store = TestStore(
+    let store = await TestStore(
       initialState: SharedFeature.State(
         profile: Shared(Profile(stats: $stats)),
         sharedCount: Shared(0),
@@ -116,9 +115,8 @@ final class SharedTests: XCTestCase {
     XCTAssertEqual(stats.count, 2)
   }
 
-  @MainActor
   func testIncrementalMutation() async {
-    let store = TestStore(
+    let store = await TestStore(
       initialState: SharedFeature.State(
         profile: Shared(Profile(stats: Shared(Stats()))),
         sharedCount: Shared(0),
@@ -164,9 +162,8 @@ final class SharedTests: XCTestCase {
     }
   }
 
-  @MainActor
   func testEffect() async {
-    let store = TestStore(
+    let store = await TestStore(
       initialState: SharedFeature.State(
         profile: Shared(Profile(stats: Shared(Stats()))),
         sharedCount: Shared(0),
@@ -212,9 +209,8 @@ final class SharedTests: XCTestCase {
     await store.receive(\.sharedIncrement)
   }
 
-  @MainActor
   func testMutationOfSharedStateInLongLivingEffect() async {
-    let store = TestStore(
+    let store = await TestStore(
       initialState: SharedFeature.State(
         profile: Shared(Profile(stats: Shared(Stats()))),
         sharedCount: Shared(0),
@@ -226,7 +222,7 @@ final class SharedTests: XCTestCase {
       $0.mainQueue = .immediate
     }
     await store.send(.longLivingEffect).finish()
-    store.assert {
+    await store.assert {
       $0.sharedCount = 1
     }
   }
@@ -300,7 +296,6 @@ final class SharedTests: XCTestCase {
     }
   }
 
-  @MainActor
   func testComplexSharedEffect_ReducerMutation() async {
     struct Feature: Reducer {
       struct State: Equatable {
@@ -333,7 +328,7 @@ final class SharedTests: XCTestCase {
       }
     }
     let mainQueue = DispatchQueue.test
-    let store = TestStore(initialState: Feature.State(count: Shared(0))) {
+    let store = await TestStore(initialState: Feature.State(count: Shared(0))) {
       Feature()
     } withDependencies: {
       $0.mainQueue = mainQueue.eraseToAnyScheduler()
@@ -347,7 +342,6 @@ final class SharedTests: XCTestCase {
     await mainQueue.advance(by: .seconds(1))
   }
 
-  @MainActor
   func testComplexSharedEffect_EffectMutation() async {
     struct Feature: Reducer {
       struct State: Equatable {
@@ -388,7 +382,7 @@ final class SharedTests: XCTestCase {
       }
     }
     let mainQueue = DispatchQueue.test
-    let store = TestStore(initialState: Feature.State(count: Shared(0))) {
+    let store = await TestStore(initialState: Feature.State(count: Shared(0))) {
       Feature()
     } withDependencies: {
       $0.mainQueue = mainQueue.eraseToAnyScheduler()
@@ -400,7 +394,7 @@ final class SharedTests: XCTestCase {
     }
     await store.send(.stopTimer)
     await mainQueue.advance(by: .seconds(1))
-    store.assert {
+    await store.assert {
       $0.count = 42
     }
   }
@@ -670,23 +664,25 @@ final class SharedTests: XCTestCase {
     }
   }
 
-  @MainActor
-  func testObserveWithPrintChanges() async {
-    let store = TestStore(initialState: SimpleFeature.State(count: Shared(0))) {
-      SimpleFeature()._printChanges()
-    }
+  #if canImport(UIKit)
+    @MainActor
+    func testObserveWithPrintChanges() async {
+      let store = TestStore(initialState: SimpleFeature.State(count: Shared(0))) {
+        SimpleFeature()._printChanges()
+      }
 
-    var observations: [Int] = []
-    observe {
-      observations.append(store.state.count)
-    }
+      var observations: [Int] = []
+      observe {
+        observations.append(store.state.count)
+      }
 
-    XCTAssertEqual(observations, [0])
-    await store.send(.incrementInReducer) {
-      $0.count += 1
+      XCTAssertEqual(observations, [0])
+      await store.send(.incrementInReducer) {
+        $0.count += 1
+      }
+      XCTAssertEqual(observations, [0, 1])
     }
-    XCTAssertEqual(observations, [0, 1])
-  }
+  #endif
 
   func testSharedDefaults_UseDefault() {
     @Shared(.isOn) var isOn
@@ -961,9 +957,9 @@ final class SharedTests: XCTestCase {
 
     first.wrappedValue.name = "Blob"
     second.wrappedValue.name = "Blob Jr"
-    XCTAssertNoDifference(first.wrappedValue, User(id: 1, name: "Blob"))
-    XCTAssertNoDifference(second.wrappedValue, User(id: 2, name: "Blob Jr"))
-    XCTAssertNoDifference(
+    expectNoDifference(first.wrappedValue, User(id: 1, name: "Blob"))
+    expectNoDifference(second.wrappedValue, User(id: 2, name: "Blob Jr"))
+    expectNoDifference(
       sharedCollection.wrappedValue,
       [
         User(id: 1, name: "Blob"),
@@ -972,9 +968,9 @@ final class SharedTests: XCTestCase {
     )
 
     sharedCollection.wrappedValue.swapAt(0, 1)
-    XCTAssertNoDifference(first.wrappedValue, User(id: 1, name: "Blob"))
-    XCTAssertNoDifference(second.wrappedValue, User(id: 2, name: "Blob Jr"))
-    XCTAssertNoDifference(
+    expectNoDifference(first.wrappedValue, User(id: 1, name: "Blob"))
+    expectNoDifference(second.wrappedValue, User(id: 2, name: "Blob Jr"))
+    expectNoDifference(
       sharedCollection.wrappedValue,
       [
         User(id: 2, name: "Blob Jr"),
@@ -984,9 +980,9 @@ final class SharedTests: XCTestCase {
 
     first.wrappedValue.name += ", M.D."
     second.wrappedValue.name += ", Esq."
-    XCTAssertNoDifference(first.wrappedValue, User(id: 1, name: "Blob, M.D."))
-    XCTAssertNoDifference(second.wrappedValue, User(id: 2, name: "Blob Jr, Esq."))
-    XCTAssertNoDifference(
+    expectNoDifference(first.wrappedValue, User(id: 1, name: "Blob, M.D."))
+    expectNoDifference(second.wrappedValue, User(id: 2, name: "Blob Jr, Esq."))
+    expectNoDifference(
       sharedCollection.wrappedValue,
       [
         User(id: 2, name: "Blob Jr, Esq."),

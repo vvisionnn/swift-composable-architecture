@@ -26,13 +26,13 @@
   }
 
   extension Store: Equatable {
-    public static func == (lhs: Store, rhs: Store) -> Bool {
+    public static nonisolated func == (lhs: Store, rhs: Store) -> Bool {
       lhs === rhs
     }
   }
 
   extension Store: Hashable {
-    public func hash(into hasher: inout Hasher) {
+    public nonisolated func hash(into hasher: inout Hasher) {
       hasher.combine(ObjectIdentifier(self))
     }
   }
@@ -155,6 +155,11 @@
     ///   - state: A key path to optional child state.
     ///   - action: A case key path to presentation child actions.
     /// - Returns: A binding of an optional child store.
+    #if swift(>=5.10)
+      @preconcurrency @MainActor
+    #else
+      @MainActor(unsafe)
+    #endif
     public func scope<State: ObservableState, Action, ChildState, ChildAction>(
       state: KeyPath<State, ChildState?>,
       action: CaseKeyPath<Action, PresentationAction<ChildAction>>,
@@ -165,6 +170,7 @@
     ) -> Binding<Store<ChildState, ChildAction>?>
     where Value == Store<State, Action> {
       self[
+        id: wrappedValue.currentState[keyPath: state].flatMap(_identifiableID),
         state: state,
         action: action,
         isInViewBody: _isInPerceptionTracking,
@@ -224,6 +230,11 @@
     ///   - state: A key path to optional child state.
     ///   - action: A case key path to presentation child actions.
     /// - Returns: A binding of an optional child store.
+    #if swift(>=5.10)
+      @preconcurrency @MainActor
+    #else
+      @MainActor(unsafe)
+    #endif
     public func scope<State: ObservableState, Action, ChildState, ChildAction>(
       state: KeyPath<State, ChildState?>,
       action: CaseKeyPath<Action, PresentationAction<ChildAction>>,
@@ -234,6 +245,7 @@
     ) -> Binding<Store<ChildState, ChildAction>?>
     where Value == Store<State, Action> {
       self[
+        id: wrappedValue.currentState[keyPath: state].flatMap(_identifiableID),
         state: state,
         action: action,
         isInViewBody: _isInPerceptionTracking,
@@ -306,6 +318,35 @@
     ) -> Binding<Store<ChildState, ChildAction>?>
     where Value == Store<State, Action> {
       self[
+        id: wrappedValue.currentState[keyPath: state].flatMap(_identifiableID),
+        state: state,
+        action: action,
+        isInViewBody: _isInPerceptionTracking,
+        fileID: _HashableStaticString(rawValue: fileID),
+        filePath: _HashableStaticString(rawValue: filePath),
+        line: line,
+        column: column
+      ]
+    }
+  }
+
+  extension UIBindable {
+    #if swift(>=5.10)
+      @preconcurrency @MainActor
+    #else
+      @MainActor(unsafe)
+    #endif
+    public func scope<State: ObservableState, Action, ChildState, ChildAction>(
+      state: KeyPath<State, ChildState?>,
+      action: CaseKeyPath<Action, PresentationAction<ChildAction>>,
+      fileID: StaticString = #fileID,
+      filePath: StaticString = #filePath,
+      line: UInt = #line,
+      column: UInt = #column
+    ) -> UIBinding<Store<ChildState, ChildAction>?>
+    where Value == Store<State, Action> {
+      self[
+        id: wrappedValue.currentState[keyPath: state].flatMap(_identifiableID),
         state: state,
         action: action,
         isInViewBody: _isInPerceptionTracking,
@@ -320,6 +361,7 @@
   extension Store where State: ObservableState {
     @_spi(Internals)
     public subscript<ChildState, ChildAction>(
+      id id: AnyHashable?,
       state state: KeyPath<State, ChildState?>,
       action action: CaseKeyPath<Action, PresentationAction<ChildAction>>,
       isInViewBody isInViewBody: Bool,
@@ -352,13 +394,17 @@
         #endif
       }
       set {
-        if newValue == nil, self.state[keyPath: state] != nil, !self._isInvalidated() {
+        if newValue == nil,
+          let childState = self.state[keyPath: state],
+          id == _identifiableID(childState),
+          !self._isInvalidated()
+        {
           self.send(action(.dismiss))
           if self.state[keyPath: state] != nil {
             reportIssue(
               """
-              SwiftUI dismissed a view through a binding at "\(fileID):\(line)", but the store \
-              destination wasn't set to "nil".
+              A binding at "\(fileID):\(line)" was set to "nil", but the store destination wasn't \
+              nil'd out.
 
               This usually means an "ifLet" has not been integrated with the reducer powering the \
               store, and this reducer is responsible for handling presentation actions.

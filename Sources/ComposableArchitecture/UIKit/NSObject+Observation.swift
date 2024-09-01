@@ -1,6 +1,7 @@
-#if canImport(Perception) && canImport(ObjectiveC)
+#if canImport(Perception) && canImport(ObjectiveC) && !canImport(UIKit)
   import Foundation
   import ObjectiveC
+  import SwiftNavigation
 
   extension NSObject {
     /// Observe access to properties of a `@Perceptible` or `@Observable` object.
@@ -119,12 +120,12 @@
     ///
     /// ## Cancellation
     ///
-    /// The method returns a ``ObservationToken`` that can be used to cancel observation. For example,
+    /// The method returns a ``ObserveToken`` that can be used to cancel observation. For example,
     /// if you only want to observe while a view controller is visible, you can start observation in
     /// the `viewWillAppear` and then cancel observation in the `viewWillDisappear`:
     ///
     /// ```swift
-    /// var observation: ObservationToken?
+    /// var observation: ObserveToken?
     ///
     /// func viewWillAppear() {
     ///   super.viewWillAppear()
@@ -138,28 +139,9 @@
     /// }
     /// ```
     @discardableResult
-    public func observe(
-      _ apply: @escaping () -> Void,
-      fileID: StaticString = #fileID,
-      filePath: StaticString = #filePath,
-      line: UInt = #line,
-      column: UInt = #column
-    ) -> ObservationToken {
-      if ObserveLocals.isApplying {
-        reportIssue(
-          """
-          An "observe" was called from another "observe" closure, which can lead to \
-          over-observation and unintended side effects.
-
-          Avoid nested closures by moving child observation into their own lifecycle methods.
-          """,
-          fileID: fileID,
-          filePath: filePath,
-          line: line,
-          column: column
-        )
-      }
-      let token = ObservationToken()
+    @_disfavoredOverload
+    public func observe(_ apply: @escaping () -> Void) -> ObserveToken {
+      let token = ObserveToken()
       self.tokens.insert(token)
       @Sendable func onChange() {
         guard !token.isCancelled
@@ -169,9 +151,7 @@
           Task { @MainActor in
             guard !token.isCancelled
             else { return }
-            ObserveLocals.$isApplying.withValue(true) {
-              onChange()
-            }
+            onChange()
           }
         }
       }
@@ -179,9 +159,9 @@
       return token
     }
 
-    fileprivate var tokens: Set<ObservationToken> {
+    fileprivate var tokens: Set<ObserveToken> {
       get {
-        (objc_getAssociatedObject(self, &NSObject.tokensHandle) as? Set<ObservationToken>) ?? []
+        (objc_getAssociatedObject(self, &NSObject.tokensHandle) as? Set<ObserveToken>) ?? []
       }
       set {
         objc_setAssociatedObject(
@@ -195,25 +175,4 @@
 
     private static var tokensHandle: UInt8 = 0
   }
-
-  /// A token for cancelling observation created with ``ObjectiveC/NSObject/observe(_:)``.
-  public final class ObservationToken: NSObject, Sendable {
-    private let _isCancelled = LockIsolated(false)
-    fileprivate var isCancelled: Bool { self._isCancelled.value }
-
-    /// Cancels observation that was created with ``ObjectiveC/NSObject/observe(_:)``.
-    ///
-    /// > Note: This cancellation is lazy and cooperative. It does not cancel the observation
-    /// immediately, but rather next time a change is detected by ``ObjectiveC/NSObject/observe(_:)``
-    /// it will cease any future observation.
-    public func cancel() { self._isCancelled.setValue(true) }
-
-    deinit {
-      self.cancel()
-    }
-  }
 #endif
-
-private enum ObserveLocals {
-  @TaskLocal static var isApplying = false
-}

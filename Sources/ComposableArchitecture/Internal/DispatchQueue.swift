@@ -1,13 +1,15 @@
 import Dispatch
 
-func mainActorASAP(execute block: @escaping @MainActor @Sendable () -> Void) {
+func mainActorNow(execute block: @MainActor @Sendable () -> Void) {
   if DispatchQueue.getSpecific(key: key) == value {
-    assumeMainActorIsolated {
+    MainActor._assumeIsolated {
       block()
     }
   } else {
-    DispatchQueue.main.async {
-      block()
+    DispatchQueue.main.sync {
+      MainActor._assumeIsolated {
+        block()
+      }
     }
   }
 }
@@ -18,10 +20,3 @@ private let key: DispatchSpecificKey<UInt8> = {
   return key
 }()
 private let value: UInt8 = 0
-
-// NB: Currently we can't use 'MainActor.assumeIsolated' on CI, but we can approximate this in
-//     the meantime.
-@MainActor(unsafe)
-private func assumeMainActorIsolated(_ block: @escaping @MainActor @Sendable () -> Void) {
-  block()
-}
