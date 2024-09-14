@@ -140,28 +140,20 @@ import SwiftUI
 public final class Store<State, Action> {
   var canCacheChildren = true
   private var children: [ScopeID<State, Action>: AnyObject] = [:]
-  var _isInvalidated = { false }
+  var _isInvalidated: @MainActor @Sendable () -> Bool = { false }
 
   @_spi(Internals) public let rootStore: RootStore
   private let toState: PartialToState<State>
   private let fromAction: (Action) -> Any
 
-  #if canImport(Perception)
-    #if !os(visionOS)
-      let _$observationRegistrar = PerceptionRegistrar(
-        isPerceptionCheckingEnabled: _isStorePerceptionCheckingEnabled
-      )
-    #else
-      let _$observationRegistrar = ObservationRegistrar()
-    #endif
-    private var parentCancellable: AnyCancellable?
+  #if !os(visionOS)
+    let _$observationRegistrar = PerceptionRegistrar(
+      isPerceptionCheckingEnabled: _isStorePerceptionCheckingEnabled
+    )
   #else
-    // NB: This dynamic member lookup is needed to support pre-Observation (<5.9) versions of Swift.
-    @_disfavoredOverload
-    private subscript(dynamicMember keyPath: KeyPath<State, Never>) -> Never {
-      self.currentState[keyPath: keyPath]
-    }
+    let _$observationRegistrar = ObservationRegistrar()
   #endif
+  private var parentCancellable: AnyCancellable?
 
   /// Initializes a store from an initial state and a reducer.
   ///
@@ -211,11 +203,7 @@ public final class Store<State, Action> {
   ///   it conforms to ``ObservableState``.
   /// - Returns: The return value, if any, of the `body` closure.
   public func withState<R>(_ body: (_ state: State) -> R) -> R {
-    #if canImport(Perception)
-      _withoutPerceptionChecking { body(self.currentState) }
-    #else
-      body(self.currentState)
-    #endif
+    _withoutPerceptionChecking { body(self.currentState) }
   }
 
   /// Sends an action to the store.
@@ -364,10 +352,10 @@ public final class Store<State, Action> {
     )
     childStore._isInvalidated =
       id == nil || !self.canCacheChildren
-      ? {
+      ? { @MainActor @Sendable in
         isInvalid?(self.currentState) == true || self._isInvalidated()
       }
-      : { [weak self] in
+      : { @MainActor @Sendable [weak self] in
         guard let self else { return true }
         return isInvalid?(self.currentState) == true || self._isInvalidated()
       }
@@ -401,25 +389,23 @@ public final class Store<State, Action> {
     self.toState = toState
     self.fromAction = fromAction
 
-    #if canImport(Perception)
-      func subscribeToDidSet<T: ObservableState>(_ type: T.Type) -> AnyCancellable {
-        let toState = toState as! PartialToState<T>
-        return rootStore.didSet
-          .compactMap { [weak rootStore] in
-            rootStore.map { toState($0.state) }?._$id
-          }
-          .removeDuplicates()
-          .dropFirst()
-          .sink { [weak self] _ in
-            guard let self else { return }
-            self._$observationRegistrar.withMutation(of: self, keyPath: \.currentState) {}
-          }
-      }
+    func subscribeToDidSet<T: ObservableState>(_ type: T.Type) -> AnyCancellable {
+      let toState = toState as! PartialToState<T>
+      return rootStore.didSet
+        .compactMap { [weak rootStore] in
+          rootStore.map { toState($0.state) }?._$id
+        }
+        .removeDuplicates()
+        .dropFirst()
+        .sink { [weak self] _ in
+          guard let self else { return }
+          self._$observationRegistrar.withMutation(of: self, keyPath: \.currentState) {}
+        }
+    }
 
-      if let stateType = State.self as? ObservableState.Type {
-        self.parentCancellable = subscribeToDidSet(stateType)
-      }
-    #endif
+    if let stateType = State.self as? any ObservableState.Type {
+      self.parentCancellable = subscribeToDidSet(stateType)
+    }
   }
 
   convenience init<R: Reducer>(
@@ -690,15 +676,13 @@ private enum PartialToState<State> {
   }
 }
 
-#if canImport(Perception)
-  let _isStorePerceptionCheckingEnabled: Bool = {
-    if #available(iOS 17, macOS 14, tvOS 17, watchOS 10, *) {
-      return false
-    } else {
-      return true
-    }
-  }()
-#endif
+let _isStorePerceptionCheckingEnabled: Bool = {
+  if #available(iOS 17, macOS 14, tvOS 17, watchOS 10, *) {
+    return false
+  } else {
+    return true
+  }
+}()
 
 #if canImport(Observation)
   // NB: This extension must be placed in the same file as 'class Store' due to either a bug

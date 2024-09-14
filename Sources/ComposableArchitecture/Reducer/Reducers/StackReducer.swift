@@ -210,14 +210,14 @@ extension StackState: Hashable where Element: Hashable {
 extension StackState: Sendable where Element: Sendable {}
 
 extension StackState: Decodable where Element: Decodable {
-  public init(from decoder: Decoder) throws {
+  public init(from decoder: any Decoder) throws {
     let elements = try [Element](from: decoder)
     self.init(elements)
   }
 }
 
 extension StackState: Encodable where Element: Encodable {
-  public func encode(to encoder: Encoder) throws {
+  public func encode(to encoder: any Encoder) throws {
     try [Element](self).encode(to: encoder)
   }
 }
@@ -517,7 +517,7 @@ public struct _StackReducer<Base: Reducer, Destination: Reducer>: Reducer {
             into: &state[keyPath: self.toStackState][id: elementID]!,
             action: destinationAction
           )
-          .map { toStackAction.embed(.element(id: elementID, action: $0)) }
+          .map { [toStackAction] in toStackAction.embed(.element(id: elementID, action: $0)) }
           ._cancellable(navigationIDPath: elementNavigationIDPath)
       } else {
         reportIssue(
@@ -538,7 +538,7 @@ public struct _StackReducer<Base: Reducer, Destination: Reducer>: Reducer {
           associated effect before an element is removed, especially if it is a long-living effect.
 
           • This action was sent to the store while its state contained no element at this ID. To \
-          fix this make sure that actions for this reducer can only be sent from a view store when \
+          fix this make sure that actions for this reducer can only be sent from a store when \
           its state contains an element at this id. In SwiftUI applications, use \
           "NavigationStack.init(path:)" with a binding to a store.
           """,
@@ -741,6 +741,10 @@ extension StackElementID: ExpressibleByIntegerLiteral {
   }
 }
 
-private struct NavigationDismissID: Hashable {
-  let elementID: AnyHashable
+private struct NavigationDismissID: Hashable, Sendable {
+  private let elementID: AnyHashableSendable
+
+  init(elementID: some Hashable & Sendable) {
+    self.elementID = AnyHashableSendable(elementID)
+  }
 }

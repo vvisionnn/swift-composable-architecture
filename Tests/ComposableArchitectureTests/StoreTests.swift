@@ -560,7 +560,7 @@ final class StoreTests: BaseTCATestCase {
   @available(*, deprecated)
   @MainActor
   func testScopeCancellation() async throws {
-    let neverEndingTask = Task<Void, Error> { try await Task.never() }
+    let neverEndingTask = Task<Void, any Error> { try await Task.never() }
 
     let store = Store(initialState: ()) {
       Reduce<Void, Void> { _, _ in
@@ -1088,25 +1088,27 @@ final class StoreTests: BaseTCATestCase {
     var body: some ReducerOf<Self> { EmptyReducer() }
   }
 
-  @MainActor
-  func testInvalidatedStoreScope() async throws {
-    @Perception.Bindable var store = Store(
-      initialState: InvalidatedStoreScopeParentFeature.State(
-        child: InvalidatedStoreScopeChildFeature.State(
-          grandchild: InvalidatedStoreScopeGrandchildFeature.State()
+  #if !os(visionOS)
+    @MainActor
+    func testInvalidatedStoreScope() async throws {
+      @Perception.Bindable var store = Store(
+        initialState: InvalidatedStoreScopeParentFeature.State(
+          child: InvalidatedStoreScopeChildFeature.State(
+            grandchild: InvalidatedStoreScopeGrandchildFeature.State()
+          )
         )
-      )
-    ) {
-      InvalidatedStoreScopeParentFeature()
+      ) {
+        InvalidatedStoreScopeParentFeature()
+      }
+      store.send(.tap)
+
+      @Perception.Bindable var childStore = store.scope(state: \.child, action: \.child)!
+      let grandchildStoreBinding = $childStore.scope(state: \.grandchild, action: \.grandchild)
+
+      store.send(.child(.dismiss))
+      grandchildStoreBinding.wrappedValue = nil
     }
-    store.send(.tap)
-
-    @Perception.Bindable var childStore = store.scope(state: \.child, action: \.child)!
-    let grandchildStoreBinding = $childStore.scope(state: \.grandchild, action: \.grandchild)
-
-    store.send(.child(.dismiss))
-    grandchildStoreBinding.wrappedValue = nil
-  }
+  #endif
 
   @MainActor
   func testSurroundingDependencies() {
@@ -1132,6 +1134,30 @@ final class StoreTests: BaseTCATestCase {
       store.withState { $0 },
       UUID(1)
     )
+  }
+
+  @MainActor
+  func testStorePublisherRemovesSubscriptionOnCancel() {
+    let store = Store<Void, Void>(initialState: ()) {}
+    weak var subscription: AnyObject?
+    let cancellable = store.publisher
+      .handleEvents(receiveSubscription: { subscription = $0 as AnyObject })
+      .sink { _ in }
+    XCTAssertNotNil(subscription)
+    cancellable.cancel()
+    XCTAssertNil(subscription)
+  }
+
+  @MainActor
+  func testSubscriptionOwnsStorePublisher() {
+    var store: Store<Void, Void>? = Store(initialState: ()) {}
+    weak var weakStore = store
+    let cancellable = store!.publisher
+      .sink { _ in }
+    store = nil
+    XCTAssertNotNil(weakStore)
+    cancellable.cancel()
+    XCTAssertNil(weakStore)
   }
 }
 

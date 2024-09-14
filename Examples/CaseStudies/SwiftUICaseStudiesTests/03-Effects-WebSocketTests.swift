@@ -6,7 +6,7 @@ import XCTest
 final class WebSocketTests: XCTestCase {
   func testWebSocketHappyPath() async {
     let actions = AsyncStream.makeStream(of: WebSocketClient.Action.self)
-    let messages = AsyncStream.makeStream(of: Result<WebSocketClient.Message, Error>.self)
+    let messages = AsyncStream.makeStream(of: Result<WebSocketClient.Message, any Error>.self)
 
     let store = await TestStore(initialState: WebSocket.State()) {
       WebSocket()
@@ -57,7 +57,7 @@ final class WebSocketTests: XCTestCase {
 
   func testWebSocketSendFailure() async {
     let actions = AsyncStream.makeStream(of: WebSocketClient.Action.self)
-    let messages = AsyncStream.makeStream(of: Result<WebSocketClient.Message, Error>.self)
+    let messages = AsyncStream.makeStream(of: Result<WebSocketClient.Message, any Error>.self)
 
     let store = await TestStore(initialState: WebSocket.State()) {
       WebSocket()
@@ -113,7 +113,7 @@ final class WebSocketTests: XCTestCase {
       $0.continuousClock = clock
       $0.webSocket.open = { @Sendable _, _, _ in actions.stream }
       $0.webSocket.receive = { @Sendable _ in try await Task.never() }
-      $0.webSocket.sendPing = { @Sendable @MainActor _ in pingsCount += 1 }
+      $0.webSocket.sendPing = { @MainActor @Sendable _ in pingsCount += 1 }
     }
 
     // Connect to the socket

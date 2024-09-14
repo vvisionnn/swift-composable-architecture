@@ -131,7 +131,7 @@ import IssueReporting
 ///
 ///   enum Action {
 ///     case queryChanged(String)
-///     case searchResponse(Result<[String], Error>)
+///     case searchResponse(Result<[String], any Error>)
 ///   }
 ///
 ///   @Dependency(\.apiClient) var apiClient
@@ -535,9 +535,6 @@ public final class TestStore<State, Action> {
   where State: Equatable, R.State == State, R.Action == Action {
     let sharedChangeTracker = SharedChangeTracker()
     let reducer = Dependencies.withDependencies {
-      if TestContext.current == .swiftTesting {
-        $0.resetCache()
-      }
       prepareDependencies(&$0)
       $0.sharedChangeTrackers.insert(sharedChangeTracker)
     } operation: {
@@ -1917,8 +1914,8 @@ extension TestStore where State: Equatable {
   ///     expected.
   @_disfavoredOverload
   @available(iOS 16, macOS 13, tvOS 16, watchOS 9, *)
-  public func receive<Value: Equatable>(
-    _ actionCase: CaseKeyPath<Action, Value>,
+  public func receive<Value: Equatable & Sendable>(
+    _ actionCase: _CaseKeyPath<Action, Value>,
     _ value: Value,
     timeout duration: Duration,
     assert updateStateToExpectedResult: ((_ state: inout State) throws -> Void)? = nil,

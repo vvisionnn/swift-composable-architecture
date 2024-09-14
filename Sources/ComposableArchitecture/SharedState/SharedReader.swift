@@ -8,7 +8,7 @@
 /// wrapper, in particular <doc:SharingState#Read-only-shared-state>.
 @dynamicMemberLookup
 @propertyWrapper
-public struct SharedReader<Value> {
+public struct SharedReader<Value: Sendable> {
   fileprivate let reference: any Reference
   fileprivate let keyPath: AnyKeyPath
 
@@ -166,7 +166,7 @@ extension SharedReader: Identifiable where Value: Identifiable {
 }
 
 extension SharedReader: Encodable where Value: Encodable {
-  public func encode(to encoder: Encoder) throws {
+  public func encode(to encoder: any Encoder) throws {
     do {
       var container = encoder.singleValueContainer()
       try container.encode(self.wrappedValue)
@@ -183,7 +183,11 @@ extension SharedReader: CustomDumpRepresentable {
 }
 
 extension SharedReader
-where Value: RandomAccessCollection & MutableCollection, Value.Index: Hashable & Sendable {
+where
+  Value: RandomAccessCollection & MutableCollection,
+  Value.Index: Hashable & Sendable,
+  Value.Element: Sendable
+{
   /// Derives a collection of read-only shared elements from a read-only shared collection of
   /// elements.
   ///

@@ -141,8 +141,8 @@ open class NavigationStackViewController<
 	
 	open func navigationController(
 		_ navigationController: UINavigationController,
-		interactionControllerFor animationController: UIViewControllerAnimatedTransitioning
-	) -> UIViewControllerInteractiveTransitioning? {
+    interactionControllerFor animationController: any UIViewControllerAnimatedTransitioning
+  ) -> (any UIViewControllerInteractiveTransitioning)? {
 		nil
 	}
 	
@@ -151,7 +151,7 @@ open class NavigationStackViewController<
 		animationControllerFor operation: UINavigationController.Operation,
 		from fromVC: UIViewController,
 		to toVC: UIViewController
-	) -> UIViewControllerAnimatedTransitioning? {
+  ) -> (any UIViewControllerAnimatedTransitioning)? {
 		nil
 	}
 	

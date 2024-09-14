@@ -4,9 +4,6 @@ import Foundation
 #if canImport(Combine)
   import Combine
 #endif
-#if canImport(Perception)
-  import Perception
-#endif
 
 extension Shared {
   /// Creates a shared reference to a value using a persistence key.
@@ -17,7 +14,7 @@ extension Shared {
   ///   - persistenceKey: A persistence key associated with the shared reference. It is responsible
   ///     for loading and saving the shared reference's value from some external source.
   public init(
-    wrappedValue value: @autoclosure @escaping () -> Value,
+    wrappedValue value: @autoclosure @Sendable () -> Value,
     _ persistenceKey: some PersistenceKey<Value>,
     fileID: StaticString = #fileID,
     line: UInt = #line
@@ -93,7 +90,7 @@ extension Shared {
   }
 
   private init(
-    throwingValue value: @autoclosure @escaping () throws -> Value,
+    throwingValue value: @autoclosure @Sendable () throws -> Value,
     _ persistenceKey: some PersistenceKey<Value>,
     fileID: StaticString = #fileID,
     line: UInt = #line
@@ -154,7 +151,7 @@ extension Shared {
   ///   - persistenceKey: A persistence key associated with the shared reference. It is responsible
   ///     for loading and saving the shared reference's value from some external source.
   public init<Key: PersistenceKey<Value>>(
-    wrappedValue value: @autoclosure @escaping () -> Value,
+    wrappedValue value: @autoclosure @Sendable () -> Value,
     _ persistenceKey: PersistenceKeyDefault<Key>,
     fileID: StaticString = #fileID,
     line: UInt = #line
@@ -177,7 +174,7 @@ extension SharedReader {
   ///   - persistenceKey: A persistence key associated with the shared reference. It is responsible
   ///     for loading the shared reference's value from some external source.
   public init(
-    wrappedValue value: @autoclosure @escaping () -> Value,
+    wrappedValue value: @autoclosure @Sendable () -> Value,
     _ persistenceKey: some PersistenceReaderKey<Value>,
     fileID: StaticString = #fileID,
     line: UInt = #line
@@ -252,7 +249,7 @@ extension SharedReader {
   }
 
   private init(
-    throwingValue value: @autoclosure @escaping () throws -> Value,
+    throwingValue value: @autoclosure @Sendable () throws -> Value,
     _ persistenceKey: some PersistenceReaderKey<Value>,
     fileID: StaticString = #fileID,
     line: UInt = #line
@@ -312,7 +309,7 @@ extension SharedReader {
   ///   - persistenceKey: A persistence key associated with the shared reference. It is responsible
   ///     for loading the shared reference's value from some external source.
   public init<Key: PersistenceReaderKey<Value>>(
-    wrappedValue value: @autoclosure @escaping () -> Value,
+    wrappedValue value: @autoclosure @Sendable () -> Value,
     _ persistenceKey: PersistenceKeyDefault<Key>,
     fileID: StaticString = #fileID,
     line: UInt = #line
@@ -328,39 +325,33 @@ extension SharedReader {
 
 private struct LoadError: Error {}
 
-final class ValueReference<Value, Persistence: PersistenceReaderKey<Value>>: Reference, @unchecked
-  Sendable
+final class ValueReference<Value, Persistence: PersistenceReaderKey<Value>>: Reference,
+  @unchecked Sendable
 {
   private let lock = NSRecursiveLock()
   private let persistenceKey: Persistence?
   #if canImport(Combine)
     private let subject: CurrentValueRelay<Value>
   #endif
-  private var subscription: Shared<Value>.Subscription?
+  private var subscription: Shared<Value>.Subscription!
   private var _value: Value {
     willSet {
       self.subject.send(newValue)
     }
   }
-  #if canImport(Perception)
-    private let _$perceptionRegistrar = PerceptionRegistrar(
-      isPerceptionCheckingEnabled: _isStorePerceptionCheckingEnabled
-    )
-  #endif
+  private let _$perceptionRegistrar = PerceptionRegistrar(
+    isPerceptionCheckingEnabled: _isStorePerceptionCheckingEnabled
+  )
   private let fileID: StaticString
   private let line: UInt
   var value: Value {
     get {
-      #if canImport(Perception)
-        self._$perceptionRegistrar.access(self, keyPath: \.value)
-      #endif
+      self._$perceptionRegistrar.access(self, keyPath: \.value)
       return self.lock.withLock { self._value }
     }
     set {
-      #if canImport(Perception)
-        self._$perceptionRegistrar.willSet(self, keyPath: \.value)
-        defer { self._$perceptionRegistrar.didSet(self, keyPath: \.value) }
-      #endif
+      self._$perceptionRegistrar.willSet(self, keyPath: \.value)
+      defer { self._$perceptionRegistrar.didSet(self, keyPath: \.value) }
       self.lock.withLock {
         self._value = newValue
         func open<A>(_ key: some PersistenceKey<A>) {
@@ -395,11 +386,9 @@ final class ValueReference<Value, Persistence: PersistenceReaderKey<Value>>: Ref
         initialValue: initialValue
       ) { [weak self] value in
         guard let self else { return }
-        mainActorNow {
-          #if canImport(Perception)
-            self._$perceptionRegistrar.willSet(self, keyPath: \.value)
-            defer { self._$perceptionRegistrar.didSet(self, keyPath: \.value) }
-          #endif
+        mainActorASAP {
+          self._$perceptionRegistrar.willSet(self, keyPath: \.value)
+          defer { self._$perceptionRegistrar.didSet(self, keyPath: \.value) }
           self.lock.withLock {
             self._value = value ?? initialValue
           }
@@ -408,15 +397,11 @@ final class ValueReference<Value, Persistence: PersistenceReaderKey<Value>>: Ref
     }
   }
   func access() {
-    #if canImport(Perception)
-      _$perceptionRegistrar.access(self, keyPath: \.value)
-    #endif
+    _$perceptionRegistrar.access(self, keyPath: \.value)
   }
   func withMutation<T>(_ mutation: () throws -> T) rethrows -> T {
-    #if canImport(Perception)
-      self._$perceptionRegistrar.willSet(self, keyPath: \.value)
-      defer { self._$perceptionRegistrar.didSet(self, keyPath: \.value) }
-    #endif
+    self._$perceptionRegistrar.willSet(self, keyPath: \.value)
+    defer { self._$perceptionRegistrar.didSet(self, keyPath: \.value) }
     return try mutation()
   }
   var description: String {
@@ -427,9 +412,8 @@ final class ValueReference<Value, Persistence: PersistenceReaderKey<Value>>: Ref
 #if canImport(Observation)
   extension ValueReference: Observable {}
 #endif
-#if canImport(Perception)
-  extension ValueReference: Perceptible {}
-#endif
+
+extension ValueReference: Perceptible {}
 
 private enum PersistentReferencesKey: DependencyKey {
   static var liveValue: LockIsolated<[AnyHashable: any Reference]> {
