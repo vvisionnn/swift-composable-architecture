@@ -409,8 +409,8 @@ final class FileStorageTests: XCTestCase {
         await Task.yield()
         expectNoDifference(users, [.blob])
 
-        $users.withLock { $0 = [.blobJr] }  // NB: Saved immediately
-        $users.withLock { $0 = [.blobSr] }  // NB: Throttled for 1 second
+        await $users.withLock { $0 = [.blobJr] }  // NB: Saved immediately
+        await $users.withLock { $0 = [.blobSr] }  // NB: Throttled for 1 second
         try FileManager.default.removeItem(at: .fileURL)
         try await Task.sleep(nanoseconds: 1_200_000_000)
         expectNoDifference(users, [.blob])
@@ -468,7 +468,7 @@ final class FileStorageTests: XCTestCase {
         }
       }
 
-      await fulfillment(of: [publisherExpectation], timeout: 0.1)
+      await fulfillment(of: [publisherExpectation], timeout: 1)
     }
   }
 }

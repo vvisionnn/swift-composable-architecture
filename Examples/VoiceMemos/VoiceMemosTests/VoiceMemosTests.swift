@@ -1,16 +1,19 @@
 import ComposableArchitecture
-import XCTest
+import Foundation
+import Testing
 
 @testable import VoiceMemos
 
 let deadbeefID = UUID(uuidString: "DEADBEEF-DEAD-BEEF-DEAD-BEEFDEADBEEF")!
 let deadbeefURL = URL(fileURLWithPath: "/tmp/DEADBEEF-DEAD-BEEF-DEAD-BEEFDEADBEEF.m4a")
 
-final class VoiceMemosTests: XCTestCase {
-  func testRecordAndPlayback() async throws {
+@MainActor
+struct VoiceMemosTests {
+  @Test
+  func recordAndPlayback() async throws {
     let didFinish = AsyncThrowingStream.makeStream(of: Bool.self)
     let clock = TestClock()
-    let store = await TestStore(initialState: VoiceMemos.State()) {
+    let store = TestStore(initialState: VoiceMemos.State()) {
       VoiceMemos()
     } withDependencies: {
       $0.audioPlayer.play = { @Sendable _ in
@@ -61,33 +64,34 @@ final class VoiceMemosTests: XCTestCase {
         )
       ]
     }
-    await store.send(\.voiceMemos[id:deadbeefURL].playButtonTapped) {
+    await store.send(\.voiceMemos[id: deadbeefURL].playButtonTapped) {
       $0.voiceMemos[id: deadbeefURL]?.mode = .playing(progress: 0)
     }
-    await store.receive(\.voiceMemos[id:deadbeefURL].delegate.playbackStarted)
+    await store.receive(\.voiceMemos[id: deadbeefURL].delegate.playbackStarted)
     await clock.run()
 
-    await store.receive(\.voiceMemos[id:deadbeefURL].timerUpdated) {
+    await store.receive(\.voiceMemos[id: deadbeefURL].timerUpdated) {
       $0.voiceMemos[id: deadbeefURL]?.mode = .playing(progress: 0.2)
     }
-    await store.receive(\.voiceMemos[id:deadbeefURL].timerUpdated) {
+    await store.receive(\.voiceMemos[id: deadbeefURL].timerUpdated) {
       $0.voiceMemos[id: deadbeefURL]?.mode = .playing(progress: 0.4)
     }
-    await store.receive(\.voiceMemos[id:deadbeefURL].timerUpdated) {
+    await store.receive(\.voiceMemos[id: deadbeefURL].timerUpdated) {
       $0.voiceMemos[id: deadbeefURL]?.mode = .playing(progress: 0.6)
     }
-    await store.receive(\.voiceMemos[id:deadbeefURL].timerUpdated) {
+    await store.receive(\.voiceMemos[id: deadbeefURL].timerUpdated) {
       $0.voiceMemos[id: deadbeefURL]?.mode = .playing(progress: 0.8)
     }
-    await store.receive(\.voiceMemos[id:deadbeefURL].audioPlayerClient.success) {
+    await store.receive(\.voiceMemos[id: deadbeefURL].audioPlayerClient.success) {
       $0.voiceMemos[id: deadbeefURL]?.mode = .notPlaying
     }
   }
 
-  func testRecordMemoHappyPath() async throws {
+  @Test
+  func recordHappyPath() async throws {
     let didFinish = AsyncThrowingStream.makeStream(of: Bool.self)
     let clock = TestClock()
-    let store = await TestStore(initialState: VoiceMemos.State()) {
+    let store = TestStore(initialState: VoiceMemos.State()) {
       VoiceMemos()
     } withDependencies: {
       $0.audioRecorder.currentTime = { 2.5 }
@@ -147,8 +151,8 @@ final class VoiceMemosTests: XCTestCase {
     await recordingMemoTask.cancel()
   }
 
-  @MainActor
-  func testPermissionDenied() async {
+  @Test
+  func permissionDenied() async {
     var didOpenSettings = false
     let store = TestStore(initialState: VoiceMemos.State()) {
       VoiceMemos()
@@ -166,14 +170,15 @@ final class VoiceMemosTests: XCTestCase {
       $0.alert = nil
     }
     await store.send(.openSettingsButtonTapped).finish()
-    XCTAssert(didOpenSettings)
+    #expect(didOpenSettings)
   }
 
-  func testRecordMemoFailure() async {
+  @Test
+  func recordFailure() async {
     struct SomeError: Error, Equatable {}
     let didFinish = AsyncThrowingStream.makeStream(of: Bool.self)
     let clock = TestClock()
-    let store = await TestStore(initialState: VoiceMemos.State()) {
+    let store = TestStore(initialState: VoiceMemos.State()) {
       VoiceMemos()
     } withDependencies: {
       $0.audioRecorder.requestRecordPermission = { true }
@@ -207,11 +212,12 @@ final class VoiceMemosTests: XCTestCase {
 
   // Demonstration of how to write a non-exhaustive test for recording a memo and it failing to
   // record.
-  func testRecordMemoFailure_NonExhaustive() async {
+  @Test
+  func recordFailureNonExhaustive() async {
     struct SomeError: Error, Equatable {}
     let didFinish = AsyncThrowingStream.makeStream(of: Bool.self)
     let clock = TestClock()
-    let store = await TestStore(initialState: VoiceMemos.State()) {
+    let store = TestStore(initialState: VoiceMemos.State()) {
       VoiceMemos()
     } withDependencies: {
       $0.audioRecorder.currentTime = { 2.5 }
@@ -235,10 +241,11 @@ final class VoiceMemosTests: XCTestCase {
     }
   }
 
-  func testPlayMemoHappyPath() async {
+  @Test
+  func playHappyPath() async {
     let url = URL(fileURLWithPath: "pointfreeco/functions.m4a")
     let clock = TestClock()
-    let store = await TestStore(
+    let store = TestStore(
       initialState: VoiceMemos.State(
         voiceMemos: [
           VoiceMemo.State(
@@ -260,30 +267,31 @@ final class VoiceMemosTests: XCTestCase {
       $0.continuousClock = clock
     }
 
-    await store.send(\.voiceMemos[id:url].playButtonTapped) {
+    await store.send(\.voiceMemos[id: url].playButtonTapped) {
       $0.voiceMemos[id: url]?.mode = .playing(progress: 0)
     }
-    await store.receive(\.voiceMemos[id:url].delegate.playbackStarted)
+    await store.receive(\.voiceMemos[id: url].delegate.playbackStarted)
     await clock.advance(by: .milliseconds(500))
-    await store.receive(\.voiceMemos[id:url].timerUpdated) {
+    await store.receive(\.voiceMemos[id: url].timerUpdated) {
       $0.voiceMemos[id: url]?.mode = .playing(progress: 0.4)
     }
     await clock.advance(by: .milliseconds(500))
-    await store.receive(\.voiceMemos[id:url].timerUpdated) {
+    await store.receive(\.voiceMemos[id: url].timerUpdated) {
       $0.voiceMemos[id: url]?.mode = .playing(progress: 0.8)
     }
     await clock.advance(by: .milliseconds(250))
-    await store.receive(\.voiceMemos[id:url].audioPlayerClient.success) {
+    await store.receive(\.voiceMemos[id: url].audioPlayerClient.success) {
       $0.voiceMemos[id: url]?.mode = .notPlaying
     }
   }
 
-  func testPlayMemoFailure() async {
+  @Test
+  func playFailure() async {
     struct SomeError: Error, Equatable {}
 
     let url = URL(fileURLWithPath: "pointfreeco/functions.m4a")
     let clock = TestClock()
-    let store = await TestStore(
+    let store = TestStore(
       initialState: VoiceMemos.State(
         voiceMemos: [
           VoiceMemo.State(
@@ -302,22 +310,23 @@ final class VoiceMemosTests: XCTestCase {
       $0.continuousClock = clock
     }
 
-    let task = await store.send(\.voiceMemos[id:url].playButtonTapped) {
+    let task = await store.send(\.voiceMemos[id: url].playButtonTapped) {
       $0.voiceMemos[id: url]?.mode = .playing(progress: 0)
     }
-    await store.receive(\.voiceMemos[id:url].delegate.playbackStarted)
-    await store.receive(\.voiceMemos[id:url].audioPlayerClient.failure) {
+    await store.receive(\.voiceMemos[id: url].delegate.playbackStarted)
+    await store.receive(\.voiceMemos[id: url].audioPlayerClient.failure) {
       $0.voiceMemos[id: url]?.mode = .notPlaying
     }
-    await store.receive(\.voiceMemos[id:url].delegate.playbackFailed) {
+    await store.receive(\.voiceMemos[id: url].delegate.playbackFailed) {
       $0.alert = AlertState { TextState("Voice memo playback failed.") }
     }
     await task.cancel()
   }
 
-  func testStopMemo() async {
+  @Test
+  func stop() async {
     let url = URL(fileURLWithPath: "pointfreeco/functions.m4a")
-    let store = await TestStore(
+    let store = TestStore(
       initialState: VoiceMemos.State(
         voiceMemos: [
           VoiceMemo.State(
@@ -333,14 +342,15 @@ final class VoiceMemosTests: XCTestCase {
       VoiceMemos()
     }
 
-    await store.send(\.voiceMemos[id:url].playButtonTapped) {
+    await store.send(\.voiceMemos[id: url].playButtonTapped) {
       $0.voiceMemos[id: url]?.mode = .notPlaying
     }
   }
 
-  func testDeleteMemo() async {
+  @Test
+  func deleteOnly() async {
     let url = URL(fileURLWithPath: "pointfreeco/functions.m4a")
-    let store = await TestStore(
+    let store = TestStore(
       initialState: VoiceMemos.State(
         voiceMemos: [
           VoiceMemo.State(
@@ -361,9 +371,10 @@ final class VoiceMemosTests: XCTestCase {
     }
   }
 
-  func testDeleteMemos() async {
+  @Test
+  func delete() async {
     let date = Date()
-    let store = await TestStore(
+    let store = TestStore(
       initialState: VoiceMemos.State(
         voiceMemos: [
           VoiceMemo.State(
@@ -413,10 +424,11 @@ final class VoiceMemosTests: XCTestCase {
     }
   }
 
-  func testDeleteMemoWhilePlaying() async {
+  @Test
+  func deleteWhilePlaying() async {
     let url = URL(fileURLWithPath: "pointfreeco/functions.m4a")
     let clock = TestClock()
-    let store = await TestStore(
+    let store = TestStore(
       initialState: VoiceMemos.State(
         voiceMemos: [
           VoiceMemo.State(
@@ -435,10 +447,10 @@ final class VoiceMemosTests: XCTestCase {
       $0.continuousClock = clock
     }
 
-    await store.send(\.voiceMemos[id:url].playButtonTapped) {
+    await store.send(\.voiceMemos[id: url].playButtonTapped) {
       $0.voiceMemos[id: url]?.mode = .playing(progress: 0)
     }
-    await store.receive(\.voiceMemos[id:url].delegate.playbackStarted)
+    await store.receive(\.voiceMemos[id: url].delegate.playbackStarted)
     await store.send(.onDelete([0])) {
       $0.voiceMemos = []
     }

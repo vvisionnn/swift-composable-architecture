@@ -1,11 +1,14 @@
 import ComposableArchitecture
-import XCTest
+import Foundation
+import Testing
 
 @testable import SwiftUICaseStudies
 
-final class RecursionTests: XCTestCase {
-  func testAddRow() async {
-    let store = await TestStore(initialState: Nested.State(id: UUID())) {
+@MainActor
+struct RecursionTests {
+  @Test
+  func addRow() async {
+    let store = TestStore(initialState: Nested.State(id: UUID())) {
       Nested()
     } withDependencies: {
       $0.uuid = .incrementing
@@ -15,13 +18,14 @@ final class RecursionTests: XCTestCase {
       $0.rows.append(Nested.State(id: UUID(0)))
     }
 
-    await store.send(\.rows[id:UUID(0)].addRowButtonTapped) {
+    await store.send(\.rows[id: UUID(0)].addRowButtonTapped) {
       $0.rows[id: UUID(0)]?.rows.append(Nested.State(id: UUID(1)))
     }
   }
 
-  func testChangeName() async {
-    let store = await TestStore(initialState: Nested.State(id: UUID())) {
+  @Test
+  func changeName() async {
+    let store = TestStore(initialState: Nested.State(id: UUID())) {
       Nested()
     }
 
@@ -30,8 +34,9 @@ final class RecursionTests: XCTestCase {
     }
   }
 
-  func testDeleteRow() async {
-    let store = await TestStore(
+  @Test
+  func deleteRow() async {
+    let store = TestStore(
       initialState: Nested.State(
         id: UUID(),
         rows: [
