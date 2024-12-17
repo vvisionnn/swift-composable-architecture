@@ -14,6 +14,8 @@ APIs, and these guides contain tips to do so.
 
 ## Topics
 
+- <doc:MigratingTo1.17>
+- <doc:MigratingTo1.16>
 - <doc:MigratingTo1.15>
 - <doc:MigratingTo1.14>
 - <doc:MigratingTo1.13>

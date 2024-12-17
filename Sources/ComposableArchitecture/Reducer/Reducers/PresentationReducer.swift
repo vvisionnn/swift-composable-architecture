@@ -293,10 +293,11 @@ extension PresentationAction: CasePathable {
     }
 
     public subscript<AppendedAction>(
-      dynamicMember keyPath: _SendableCaseKeyPath<Action, AppendedAction>
+      dynamicMember keyPath: CaseKeyPath<Action, AppendedAction>
     ) -> AnyCasePath<PresentationAction, AppendedAction>
     where Action: CasePathable {
-      AnyCasePath<PresentationAction, AppendedAction>(
+      let keyPath = keyPath.unsafeSendable()
+      return AnyCasePath<PresentationAction, AppendedAction>(
         embed: { .presented(keyPath($0)) },
         extract: {
           guard case let .presented(action) = $0 else { return nil }
@@ -307,10 +308,11 @@ extension PresentationAction: CasePathable {
 
     @_disfavoredOverload
     public subscript<AppendedAction>(
-      dynamicMember keyPath: _SendableCaseKeyPath<Action, AppendedAction>
+      dynamicMember keyPath: CaseKeyPath<Action, AppendedAction>
     ) -> AnyCasePath<PresentationAction, PresentationAction<AppendedAction>>
     where Action: CasePathable {
-      AnyCasePath<PresentationAction, PresentationAction<AppendedAction>>(
+      let keyPath = keyPath.unsafeSendable()
+      return AnyCasePath<PresentationAction, PresentationAction<AppendedAction>>(
         embed: {
           switch $0 {
           case .dismiss:
@@ -398,6 +400,10 @@ extension Reducer {
   ///   - toPresentationAction: A case path from parent action to a case containing child actions.
   ///   - destination: A reducer that will be invoked with child actions against presented child
   ///     state.
+  ///   - fileID: The fileID.
+  ///   - filePath: The filePath.
+  ///   - line: The line.
+  ///   - column: The column.
   /// - Returns: A reducer that combines the child reducer with the parent reducer.
   @warn_unqualified_access
   @inlinable
