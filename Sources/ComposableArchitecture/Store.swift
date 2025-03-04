@@ -331,14 +331,12 @@ public final class Store<State, Action> {
   }
 
   @_spi(Internals)
-  public
-    func scope<ChildState, ChildAction>(
-      id: ScopeID<State, Action>?,
-      state: ToState<State, ChildState>,
-      action fromChildAction: @escaping (ChildAction) -> Action,
-      isInvalid: ((State) -> Bool)?
-    ) -> Store<ChildState, ChildAction>
-  {
+  public func scope<ChildState, ChildAction>(
+    id: ScopeID<State, Action>?,
+    state: ToState<State, ChildState>,
+    action fromChildAction: @escaping (ChildAction) -> Action,
+    isInvalid: ((State) -> Bool)?
+  ) -> Store<ChildState, ChildAction> {
     if self.canCacheChildren,
       let id = id,
       let childStore = self.children[id] as? Store<ChildState, ChildAction>

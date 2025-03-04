@@ -5,6 +5,7 @@
 /*.swiftinterface
 /*.xcodeproj
 xcuserdata/
+.docc-build/
 
 # Tuist Derived Folder
 Derived/
