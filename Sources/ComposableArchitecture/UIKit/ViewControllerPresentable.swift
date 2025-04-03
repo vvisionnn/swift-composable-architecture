@@ -186,18 +186,22 @@ extension Store where State: Equatable {
 	public func map<TargetState, Target>(
 		_ transform: @MainActor (Store<TargetState, Action>) -> Target
 	) -> Target? where State == Optional<TargetState> {
-		guard var state = self.currentState else { return nil }
-		return transform(
-			self.scope(
-				id: self.id(state: \.!, action: \.self),
-				state: ToState {
-					state = $0 ?? state
-					return state
-				},
-				action: { $0 },
-				isInvalid: nil
-			)
-		)
+    guard let state = self.currentState else { return nil }
+    @MainActor
+    func open(_ core: some Core<State, Action>) -> any Core<TargetState, Action> {
+      IfLetCore(
+        base: core,
+        cachedState: state,
+        stateKeyPath: \.self,
+        actionKeyPath: \.self
+      )
+    }
+    return transform(
+      self.scope(
+        id: self.id(state: \.!, action: \.self),
+        childCore: open(core)
+      )
+    )
 	}
 }
 

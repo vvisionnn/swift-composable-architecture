@@ -67,33 +67,39 @@ open class NavigationStackViewController<
 		self.store = store
 		self.rootDestination = rootViewController
 		self.delegate = self
-		return store.publisher
-			.removeDuplicates(by: { areOrderedSetsDuplicates($0.ids, $1.ids) })
-			.receive(on: RunLoop.main)
-			.sink { [weak self] stackState in
-				guard let self else { return }
-				let newDestinations = stackState.ids
-					.reduce(into: Destinations(), { partialResult, id in
-						if let originalViewController = self.destinations[id] {
-							partialResult[id] = originalViewController
-						} else if let state = store.currentState[id: id] {
-							partialResult[id] = destination(state, store.scope(
-								id: store.id(state: \.[id:id]!, action: \.[id:id]),
-								state: ToState(returningLastNonNilValue(
-									{ _ in store.currentState[id: id] },
-									defaultValue: state)
-								),
-								action: { .element(id: id, action: $0) },
-								isInvalid: { !$0.ids.contains(id) }
-							))
-						}
-					})
-				self.destinations = newDestinations
-				self.setViewControllers(
-					Array([self.rootDestination] + self.destinations.values),
-					animated: self.viewIfLoaded?.window != nil
-				)
-			}
+    return store.publisher
+      .removeDuplicates(by: { areOrderedSetsDuplicates($0.ids, $1.ids) })
+      .receive(on: RunLoop.main)
+      .sink { [weak self] stackState in
+        guard let self else { return }
+        let newDestinations = stackState.ids
+          .reduce(into: Destinations()) { partialResult, id in
+            if let originalViewController = self.destinations[id] {
+              partialResult[id] = originalViewController
+            } else if let state = store.currentState[id: id] {
+              @MainActor
+              func open(
+                _ core: some Core<StackState<State>, StackAction<State, Action>>
+              ) -> any Core<State, Action> {
+                IfLetCore(
+                  base: core,
+                  cachedState: store.currentState[id: id] ?? state,
+                  stateKeyPath: \.[id: id],
+                  actionKeyPath: \.[id: id]
+                )
+              }
+              partialResult[id] = destination(state, store.scope(
+                id: store.id(state: \.[id: id]!, action: \.[id: id]),
+                childCore: open(store.core)
+              ))
+            }
+          }
+        destinations = newDestinations
+        setViewControllers(
+          Array([rootDestination] + destinations.values),
+          animated: viewIfLoaded?.window != nil
+        )
+      }
 	}
 	
 	open func navigationController(
