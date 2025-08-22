@@ -483,8 +483,8 @@ extension Store {
 
 @_spi(Internals)
 public var _isInPerceptionTracking: Bool {
-  #if !os(visionOS)
-    return _PerceptionLocals.isInPerceptionTracking
+  #if DEBUG && !os(visionOS)
+    return _PerceptionLocals.isInPerceptionTracking || _PerceptionLocals.skipPerceptionChecking
   #else
     return false
   #endif

@@ -61,9 +61,13 @@ final class RootCore<Root: Reducer>: Core {
     self.reducer = reducer
   }
   func send(_ action: Root.Action) -> Task<Void, Never>? {
-    _withoutPerceptionChecking {
+    #if DEBUG
+      _PerceptionLocals.$skipPerceptionChecking.withValue(true) {
+        _send(action)
+      }
+    #else
       _send(action)
-    }
+    #endif
   }
   private func _send(_ action: Root.Action) -> Task<Void, Never>? {
     self.bufferedActions.append(action)
@@ -200,6 +204,9 @@ final class ScopedCore<Base: Core, State, Action>: Core {
   let base: Base
   let stateKeyPath: KeyPath<Base.State, State>
   let actionKeyPath: CaseKeyPath<Base.Action, Action>
+  #if DEBUG
+    let isInPerceptionTracking = _PerceptionLocals.isInPerceptionTracking
+  #endif
   init(
     base: Base,
     stateKeyPath: KeyPath<Base.State, State>,
@@ -212,7 +219,13 @@ final class ScopedCore<Base: Core, State, Action>: Core {
   @inlinable
   @inline(__always)
   var state: State {
-    base.state[keyPath: stateKeyPath]
+    #if DEBUG
+      return _PerceptionLocals.$skipPerceptionChecking.withValue(isInPerceptionTracking) {
+        base.state[keyPath: stateKeyPath]
+      }
+    #else
+      return base.state[keyPath: stateKeyPath]
+    #endif
   }
   @inlinable
   @inline(__always)
